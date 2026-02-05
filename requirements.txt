@@ -1,0 +1,31 @@
+# DINO-VO Requirements
+# Python 3.8+
+
+# Core Deep Learning
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Numerical Computing
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Computer Vision
+opencv-python>=4.8.0
+
+# Configuration Management
+pyyaml>=6.0
+omegaconf>=2.3.0
+
+# Visualization
+matplotlib>=3.7.0
+tqdm>=4.65.0
+
+# Trajectory Evaluation (optional - can implement ATE manually)
+# evo>=1.20.0
+
+# Development Tools
+jupyter>=1.0.0
+pytest>=7.3.0
+
+# Note: DINOv2 will be loaded via torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
+# No separate installation required
