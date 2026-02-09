@@ -31,10 +31,19 @@ data/euroc/
 *.bag
 *.zip
 
+# Model weights and checkpoints
+checkpoints/
+*.pt
+*.pth
+*.onnx
+*.safetensors
+
+# Torch Hub cached models
+.cache/
+
 # Output visualizations (generated files)
 outputs/*.png
 outputs/*.jpg
-outputs/*.txt
 outputs/*.txt
 
 # Keep README files
