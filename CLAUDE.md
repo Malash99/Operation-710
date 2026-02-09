@@ -442,34 +442,72 @@ L_t = (1 - λ_p) * L_m + λ_p * L_p
 
 ---
 
-### 🚧 Phase 2: Data Pipeline (NEXT)
+### ✅ Phase 2: Data Pipeline (COMPLETED)
 
-**Next Steps**:
-1. Implement EuRoC dataset loader (`src/datasets/euroc.py`)
-   - Load consecutive image pairs
-   - Load ground truth poses
-   - Load camera intrinsics from sensor.yaml
+**Date Completed**: February 10, 2026
 
-2. Implement image transforms (`src/datasets/transforms.py`)
-   - Resize: 752×480 → 476×742 (as per paper Section IV-A)
-   - Normalization: mean/std for DINOv2 input
-   - Optional augmentation: brightness, contrast (if needed)
+#### Completed Tasks:
+1. ✅ Implemented image transforms (`src/datasets/transforms.py`)
+   - Undistortion via `cv2.undistort` using calibration from sensor.yaml
+   - Resize: 752×480 → 742×476 (W×H) as per paper Section IV-A
+   - Grayscale → RGB (3-channel repeat for DINOv2)
+   - ImageNet normalization (mean/std required by DINOv2)
+   - Intrinsics rescaling after resize
 
-3. Test and visualize
-   - Load sample image pairs
-   - Verify preprocessing
-   - Display overlaid features
+2. ✅ Implemented EuRoC dataset loader (`src/datasets/euroc.py`)
+   - Parses cam0/sensor.yaml for K, distortion, T_BS extrinsics
+   - Parses cam0/data.csv for image timestamps and filenames
+   - Parses state_groundtruth_estimate0/data.csv for GT poses
+   - Matches image timestamps to nearest GT via np.searchsorted (25ms threshold)
+   - Computes relative camera pose: T_1to2 = inv(T_WC2) @ T_WC1
+   - Coordinate frames: T_WC = T_WB @ T_BS (body→world @ cam→body)
+   - skip_frames=2 (alternate frames, as per paper Section III-F)
+
+3. ✅ Verified with test script (`scripts/test_dataloader.py`)
+   - Dataset length: 3,637 pairs
+   - Image tensors: shape [3, 476, 742], values in [-2.1, 2.6] (normalized)
+   - Rescaled intrinsics: fx=452.55, fy=453.49, cx=362.33, cy=246.31
+   - Rotation validity: det(R)=1.000000, max|R@R^T - I|=5.96e-08
+   - Translation magnitude: ~0.079m (first pair, 100ms apart)
+   - Visualization saved: outputs/dataloader_test.png
+
+#### Important Notes:
+
+**EuRoC Coordinate Frames**:
+- Ground truth gives T_WB (body in world frame)
+- cam0/sensor.yaml T_BS transforms camera→body (NOT identity!)
+- Camera in world: T_WC = T_WB @ T_BS
+- Relative pose: T_1to2 = inv(T_WC2) @ T_WC1
+
+**EuRoC Quaternion Convention**:
+- EuRoC stores (qw, qx, qy, qz) in CSV columns 5-8
+- scipy.Rotation.from_quat expects (qx, qy, qz, qw) — reorder required
+
+**Dataset GPU Notes**:
+- Dataloader returns CPU tensors (standard PyTorch practice)
+- `.to(device)` is applied in the training loop (Phase 8)
+- All model computation (Phases 3-9) will run on GPU
+
+#### Files Created:
+- `src/datasets/transforms.py` — Image preprocessing pipeline
+- `src/datasets/euroc.py` — EuRoC PyTorch Dataset class
+- `scripts/test_dataloader.py` — Data pipeline verification script
+
+---
+
+### 🚧 Phase 3: Keypoint Detector (NEXT)
+
+**Next Steps** (Paper Section III-A):
+1. Implement Gaussian filter + Sobel gradient computation
+2. Implement grid-based MaxPooling (kernel=14, stride=14)
+3. Implement Non-Maximum Suppression (NMS) with radius=8
+4. Implement gradient thresholding + top-k selection (512 keypoints)
+5. Test: Visualize detected keypoints on sample image
 
 ---
 
 ## Start Command
 
-When ready to begin, say:
+**For resuming from Phase 3**:
 
-"Let's start implementing DINO-VO. Phase 1: Environment Setup. First, I'll create the project directory structure."
-
-Then follow the implementation order step by step.
-
-**For resuming from Phase 2**:
-
-"Phase 1 is complete. Let's proceed with Phase 2: Data Pipeline. First, I'll implement the EuRoC dataset loader."
+"Phase 2 is complete. Let's proceed with Phase 3: Keypoint Detector (Section III-A). First, I'll implement the Gaussian filter and Sobel gradient computation."
