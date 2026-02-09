@@ -35,6 +35,7 @@ data/euroc/
 outputs/*.png
 outputs/*.jpg
 outputs/*.txt
+outputs/*.txt
 
 # Keep README files
 !data/README.md
