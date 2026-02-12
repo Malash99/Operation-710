@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(python -c:*)",
+      "Bash(python scripts/test_dataloader.py:*)",
+      "Bash(python:*)",
+      "Bash(git check-ignore:*)"
     ]
   }
 }
