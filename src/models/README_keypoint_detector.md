@@ -26,7 +26,7 @@ DINO-VO needs sparse correspondences between two frames to estimate camera motio
                         DINO-VO Pipeline
                         ================
 
-  Image_t ──┬──> [Salient Keypoint Detector] ──> 512 keypoints (x,y)
+  Image_t  ──┬──> [Salient Keypoint Detector] ──> 512 keypoints (x,y)
              │              ▼
              ├──> [DINOv2 ViT-S] ──────────────> patch features (384-dim)
              │              ▼
