@@ -46,20 +46,48 @@ The keypoint detector is the **first module** in the pipeline. Its output (pixel
 
 ---
 
+## Pipeline Overview
+
+The full detector pipeline on a real EuRoC MH01 frame:
+
+![Pipeline Overview](../../outputs/keypoint_steps/pipeline_overview.png)
+
+---
+
 ## How It Works (Step by Step)
 
-### Step 1: Gaussian Smoothing
+### Step 1: Grayscale Recovery
+
+The EuRoC dataloader outputs ImageNet-normalized 3-channel tensors. Since the original images are grayscale (repeated to 3 channels), we reverse the normalization on channel 0 to recover the grayscale image in [0, 1].
+
+```
+I_gray = image[:, 0:1] * std_ch0 + mean_ch0
+```
+
+![Step 1 — Grayscale](../../outputs/keypoint_steps/step1_grayscale.png)
+
+---
+
+### Step 2: Gaussian Smoothing
+
 Apply a Gaussian filter to reduce noise before gradient computation.
 
 - **Kernel size:** 5x5
 - **Standard deviation:** 2.0
-- **Implementation:** `torchvision.transforms.GaussianBlur` or `torch.nn.Conv2d` with Gaussian kernel
+- **Implementation:** `torch.nn.functional.conv2d` with a pre-built Gaussian kernel (registered as a buffer)
 
 ```
 I_smooth = GaussianFilter(I_gray, kernel=5, sigma=2.0)
 ```
 
-### Step 2: Sobel Gradient Magnitude
+The smoothing suppresses sensor noise while preserving strong edges — compare the original (left) with the smoothed result (right):
+
+![Step 2 — Gaussian Smoothing](../../outputs/keypoint_steps/step2_gaussian.png)
+
+---
+
+### Step 3: Sobel Gradient Magnitude
+
 Compute image gradients in x and y directions using Sobel operators, then compute the gradient magnitude.
 
 ```
@@ -68,39 +96,55 @@ G_y = Sobel_y(I_smooth)
 G = sqrt(G_x² + G_y²)
 ```
 
-This produces a gradient magnitude map where edges and corners have high values.
+This produces a gradient magnitude map where edges and corners have high values (bright = strong gradient):
 
-### Step 3: Grid-Based MaxPooling
+![Step 3 — Gradient Magnitude](../../outputs/keypoint_steps/step3_gradient.png)
+
+---
+
+### Step 4: Grid-Based MaxPooling
+
 Pool the gradient magnitude into a grid that matches DINOv2's patch size. DINOv2-ViT-S uses 14x14 patches, so we apply MaxPool with:
 
 - **Kernel size:** 14x14
 - **Stride:** 14
 
-This produces a coarse grid where each cell contains the maximum gradient value from its corresponding 14x14 image patch. For a 476x742 image:
-- Output size: 34x53 = 1,802 cells
+This produces a coarse grid where each cell contributes **one candidate keypoint** — the pixel with the highest gradient in that patch. For a 476x742 image:
+- Output size: 34x53 = **1,802 candidates**
 
 ```
 G_pooled = MaxPool2d(G, kernel_size=14, stride=14)  # shape: (34, 53)
 ```
 
-### Step 4: Non-Maximum Suppression (NMS)
-Within each grid cell that was selected as a local maximum, find the exact pixel with the highest gradient. Then apply NMS with a radius to avoid keypoints that are too close together.
+The cyan grid shows the 14x14 DINOv2 patches. Each colored dot is the max-gradient pixel within its patch:
+
+![Step 4 — MaxPool Candidates](../../outputs/keypoint_steps/step4_maxpool.png)
+
+---
+
+### Step 5: Non-Maximum Suppression (NMS)
+
+Apply NMS with a radius to suppress keypoints that are too close together. This is processed greedily — the highest-scoring keypoint survives and suppresses all neighbors within the radius.
 
 - **NMS radius:** r_NMS = 8 pixels
 
-This ensures keypoints are spatially well-distributed.
+NMS reduces 1,802 candidates to **1,206** (596 suppressed):
 
-### Step 5: Gradient Thresholding
-Remove keypoints with very weak gradients (likely in textureless regions).
+![Step 5 — NMS](../../outputs/keypoint_steps/step5_nms.png)
 
-- **Threshold:** 0.01 (on normalized gradient magnitude)
+---
 
-### Step 6: Top-K Selection
-Select the top 512 keypoints by gradient magnitude.
+### Step 6: Gradient Thresholding + Top-K Selection
 
-- **K:** 512 keypoints per image
+Two final filters:
+1. **Gradient threshold** (0.01) — removes keypoints in textureless regions
+2. **Top-K selection** (K=512) — keeps the 512 highest-scoring keypoints
 
-If fewer than 512 keypoints pass the threshold, all surviving keypoints are kept.
+If fewer than 512 keypoints pass the threshold, all surviving keypoints are kept (padded with zeros).
+
+The final 512 keypoints are well-distributed, concentrated on edges/corners, and colored by gradient score (red = strongest):
+
+![Step 6 — Final Keypoints](../../outputs/keypoint_steps/step6_final.png)
 
 ---
 
@@ -121,12 +165,14 @@ If fewer than 512 keypoints pass the threshold, all surviving keypoints are kept
 ## Expected Input / Output
 
 **Input:**
-- Grayscale image tensor, shape `(1, 1, 476, 742)` or `(B, 1, 476, 742)`
-- Values in `[0, 1]` range (before ImageNet normalization)
+- ImageNet-normalized RGB tensor, shape `(B, 3, 476, 742)`
+- (Grayscale is recovered internally by reversing normalization)
 
 **Output:**
-- Keypoint coordinates: `(B, 512, 2)` — (x, y) pixel coordinates
-- Keypoint scores: `(B, 512)` — gradient magnitude at each keypoint
+- `keypoints`: `(B, 512, 2)` — (x, y) pixel coordinates
+- `scores`: `(B, 512)` — gradient magnitude at each keypoint
+- `num_valid`: `(B,)` — number of valid keypoints per image
+- `gradient_map`: `(B, 1, H, W)` — full gradient magnitude map
 
 ---
 
@@ -145,7 +191,7 @@ After implementation, verify:
 
 | Module | Interaction |
 |--------|-------------|
-| **transforms.py** | Provides preprocessed images; keypoint detector needs the pre-normalization grayscale |
+| **transforms.py** | Provides preprocessed images; keypoint detector reverses normalization internally |
 | **feature_descriptor.py** | Takes keypoint coordinates → samples DINOv2 and FinerCNN features at those locations |
 | **feature_matching.py** | Receives keypoints + descriptors from both frames → produces correspondences |
 | **losses.py** | Matching loss supervises correspondence quality; pose loss supervises estimated motion |
@@ -155,7 +201,18 @@ After implementation, verify:
 ## Implementation Notes
 
 - The detector is **not learned** — it uses fixed Gaussian/Sobel filters, no trainable parameters
-- It operates on **single-channel** (grayscale) images, not the 3-channel normalized tensors
-- The grayscale image should be extracted from the original image before ImageNet normalization
-- All operations should be implemented as **torch operations** for GPU compatibility
+- It accepts ImageNet-normalized 3-channel tensors and recovers grayscale internally
+- All operations are implemented as **torch operations** running on GPU
 - The detector processes both frames of a pair independently
+
+---
+
+## Regenerating Visualizations
+
+To regenerate the step-by-step visualizations from a real EuRoC frame:
+
+```bash
+python scripts/visualize_keypoint_steps.py
+```
+
+Output is saved to `outputs/keypoint_steps/`.
