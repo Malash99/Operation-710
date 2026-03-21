@@ -204,8 +204,17 @@ L_pose: Rotation + Translation loss (Eq. 13)
 - [x] Verified: shape `(B, 512, 192)`, norm error < 1.2e-07, 151K trainable params
 - See: [`src/models/README_phase4_feature_descriptor.md`](src/models/README_phase4_feature_descriptor.md)
 
-### 📋 Phase 5–9: Upcoming
-- Phase 5: Feature Matching (Transformer, L=12 layers, rotary positional encoding)
+### ✅ Phase 5: Feature Matching (COMPLETE)
+- [x] Transformer-based matching (L=12 layers, 3 heads, head_dim=64)
+- [x] Self-attention with 2D Rotary Positional Encoding (encodes keypoint x,y)
+- [x] Cross-attention between image pairs (no positional encoding)
+- [x] Dual-softmax soft assignment matrix (Eq. 5-8)
+- [x] Confidence prediction MLP (Eq. 9)
+- [x] Mutual nearest-neighbor match extraction
+- [x] Verified: 6.3M trainable params, 110ms forward, 169 MB GPU, gradients flow
+- See: [`src/models/README_phase5_feature_matching.md`](src/models/README_phase5_feature_matching.md)
+
+### 📋 Phase 6–9: Upcoming
 - Phase 6: Pose Estimation (Weighted 8-point, Essential matrix, cheirality check)
 - Phase 7: Loss Functions (Matching loss Eq.12 + Pose loss Eq.13)
 - Phase 8: Training Pipeline
