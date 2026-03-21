@@ -27,18 +27,26 @@ The matching transformer (Phase 5) starts with random weights and produces meani
 
 ## Paper Equations
 
-### Eq. 12: Matching Loss
+### Eq. 12: Matching Loss (Full Formulation with Deep Supervision)
 ```
-L_m = -(1/|M|) * Sum_{(i,j) in M} log(P_ij)
+L_m = -(1/L) * Sum_l [
+    (1/|M|) * Sum_{(i,j) in M} log(P_ij^l)
+  + (1/(2*|K_bar_t|))   * Sum_{i in K_bar_t}   log(1 - sigma_i^l)
+  + (1/(2*|K_bar_t+1|)) * Sum_{j in K_bar_t+1} log(1 - sigma_j^l)
+]
 ```
-Negative log-likelihood of the assignment matrix at ground truth correspondence locations. Lower when P assigns high probability to correct matches.
+Three terms, averaged over all L transformer layers:
+1. **NLL at GT correspondences** — pushes P to assign high probability to correct matches
+2. **Unmatchable penalty (image t)** — pushes sigma toward 0 for keypoints without a match
+3. **Unmatchable penalty (image t+1)** — same for the second image
 
 ### Eq. 13: Pose Loss
 ```
-L_p = lambda_r * ||log(R_hat) - log(R_gt)|| + lambda_t * ||t_hat/||t_hat|| - t_gt/||t_gt||||
+L_p = lambda_t * ||t_hat/max(||t_hat||, eps) - t_gt/max(||t_gt||, eps)||
+    + lambda_r * ||Log(R_hat) - Log(R_gt)||
 ```
+- **Translation error:** L2 distance between unit translation vectors, using `max(||t||, eps)` with `eps=1e-6` for numerical stability. Weighted by `lambda_t = 400`.
 - **Rotation error:** Geodesic distance on SO(3) via the matrix logarithm (rotation vector representation). Weighted by `lambda_r = 180`.
-- **Translation error:** L2 distance between unit translation vectors. Weighted by `lambda_t = 400`.
 
 ### Eq. 14: Combined Loss
 ```
@@ -53,13 +61,15 @@ L_total = (1 - lambda_p) * L_m + lambda_p * L_p
 
 ## How It Works
 
-### Matching Loss
+### Matching Loss (Deep Supervision)
 
-1. Receive assignment matrix P `(B, K, K)` from Phase 5
-2. Receive ground truth matches `(i, j)` pairs
-3. Look up `P[i, j]` for each GT match
-4. Compute `-log(P[i, j])` and average over all valid matches
-5. Result: scalar loss that decreases as P improves
+For each transformer layer l = 1..L:
+1. Compute assignment matrix P^l and matchability sigma^l from layer features
+2. **Term 1:** For GT matches (i,j) in M, compute `-log(P^l[i,j])` and average
+3. **Term 2:** For unmatchable keypoints in image t (K_bar_t), compute `-log(1 - sigma_i^l)` and average, weighted by 0.5
+4. **Term 3:** For unmatchable keypoints in image t+1 (K_bar_t+1), compute `-log(1 - sigma_j^l)` and average, weighted by 0.5
+5. Sum three terms for this layer
+6. Average over all L layers
 
 ### Pose Loss
 
@@ -113,15 +123,15 @@ Where N1 is the total steps in the first 4 epochs. After step N1, `lambda_p` inc
 ## Expected Input / Output
 
 ### MatchingLoss
-- **Input:** `assignment (B,K,K)`, `gt_matches (B,M,2)`, `gt_mask (B,M)`
-- **Output:** scalar loss
+- **Input:** `all_assignments: list of L (B,K,K)`, `all_sigma1: list of L (B,K,1)`, `all_sigma2: list of L (B,K,1)`, `gt_matches (B,M,2)`, `gt_mask (B,M)`
+- **Output:** scalar loss (averaged over L layers, 3 terms per layer)
 
 ### PoseLoss
 - **Input:** `R_est (B,3,3)`, `t_est (B,3)`, `R_gt (B,3,3)`, `t_gt (B,3)`
 - **Output:** scalar loss
 
 ### DinoVOLoss (combined)
-- **Input:** all of the above
+- **Input:** all_assignments, all_sigma1, all_sigma2, gt_matches, gt_mask, R_est, t_est, R_gt, t_gt
 - **Output:** dict with `total`, `matching`, `pose`, `lambda_p`
 
 ---
@@ -130,16 +140,15 @@ Where N1 is the total steps in the first 4 epochs. After step N1, `lambda_p` inc
 
 | Check | Expected | Actual | Status |
 |-------|----------|--------|--------|
-| MatchingLoss positive (random P) | > 0 | 5.68 | PASSED |
-| MatchingLoss near-zero (P=0.99) | < 0.02 | 0.010 | PASSED |
-| PoseLoss positive (different R,t) | > 0 | 573.5 | PASSED |
-| PoseLoss zero (identical R,t) | ~0 | 0.0 | PASSED |
+| MatchingLoss 3 terms + deep supervision | > 0 | 1.60 | PASSED |
+| Unmatchable penalty (sigma~0.99) | high | 5.50 | PASSED |
+| Unmatchable penalty (sigma~0.01) | low | 0.91 | PASSED |
+| PoseLoss eps=1e-6 (paper Eq. 13) | finite | 396.0 | PASSED |
+| PoseLoss near-zero t_est | no NaN | finite | PASSED |
 | lambda_p=0: total = matching | equal | equal | PASSED |
 | lambda_p=0.5: total = 0.5*m + 0.5*p | correct | correct | PASSED |
 | Scheduling caps at 0.9 | 0.9 | 0.9 | PASSED |
-| Gradients on assignment | non-zero | 282.2 | PASSED |
-| Gradients on R_est | non-zero | 22.5 | PASSED |
-| Gradients on t_est | non-zero | 73.8 | PASSED |
+| Deep supervision per-layer P | L tensors | L tensors | PASSED |
 
 ---
 
@@ -168,5 +177,8 @@ Where N1 is the total steps in the first 4 epochs. After step N1, `lambda_p` inc
 - **Differentiable rotation logarithm:** Uses Rodrigues formula with clamped arccos to avoid NaN gradients at theta=0 and theta=pi.
 - **Translation comparison:** Both estimated and GT translations are normalized to unit vectors before comparison, since monocular VO cannot recover absolute scale.
 - **Epsilon in log:** `log(P + eps)` with `eps=1e-8` prevents `-inf` when P is exactly 0.
+- **Translation normalization:** Uses `max(||t||, eps)` with `eps=1e-6` per paper Eq. 13, instead of `||t|| + eps`.
+- **Deep supervision:** MatchingLoss averages over all L transformer layers (Eq. 12: `1/L * Sum_l`).
+- **Unmatchable keypoints:** Loss terms 2 and 3 penalize high sigma for keypoints without GT matches.
 - **Batch handling:** MatchingLoss iterates over batch elements to handle variable-length GT match lists via masking.
 - **lambda_p as buffer:** Stored as a registered buffer so it persists in checkpoints and moves with `.to(device)`.
