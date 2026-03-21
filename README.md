@@ -176,23 +176,40 @@ L_pose: Rotation + Translation loss (Eq. 13)
 
 ### ✅ Phase 1: Environment Setup (COMPLETE)
 - [x] Project structure created
-- [x] PyTorch installed with RTX 5060 Ti support (CUDA 12.8)
-- [x] GPU verified and working
-- [x] EuRoC MH_01_easy dataset downloaded and verified
+- [x] PyTorch nightly installed with RTX 5060 Ti support (CUDA 12.8, sm_120)
+- [x] GPU verified and working (15.93 GB VRAM)
+- [x] EuRoC MH_01_easy dataset downloaded and verified (3,682 frames)
 
-### 🚧 Phase 2: Data Pipeline (IN PROGRESS)
-- [ ] EuRoC dataset loader implementation
-- [ ] Image preprocessing and transforms
-- [ ] Visualize image pairs
+### ✅ Phase 2: Data Pipeline (COMPLETE)
+- [x] EuRoC dataset loader (`src/datasets/euroc.py`)
+- [x] Image preprocessing and transforms (`src/datasets/transforms.py`)
+- [x] Undistortion, resize 752×480 → 742×476, ImageNet normalization
+- [x] Ground truth pose loading with coordinate frame correction
+- [x] Verified: 3,637 image pairs, intrinsics rescaled correctly
 
-### 📋 Phase 3-9: Upcoming
-- Phase 3: Keypoint Detector
-- Phase 4: Feature Descriptor
-- Phase 5: Feature Matching
-- Phase 6: Pose Estimation
-- Phase 7: Loss Functions
+### ✅ Phase 3: Keypoint Detector (COMPLETE)
+- [x] Gaussian smoothing (kernel=5, sigma=2.0)
+- [x] Sobel gradient magnitude computation
+- [x] Grid-based MaxPooling (kernel=14, stride=14 — matches DINOv2 patch size)
+- [x] Non-Maximum Suppression (radius=8)
+- [x] Gradient thresholding (0.01) + Top-k selection (512 keypoints)
+- [x] Verified: 512 keypoints per image, spatially distributed
+- See: [`src/models/README_phase3_keypoint_detector.md`](src/models/README_phase3_keypoint_detector.md)
+
+### ✅ Phase 4: Feature Descriptor (COMPLETE)
+- [x] DINOv2-ViT-S/14 loaded from torch.hub, fully frozen (22M params)
+- [x] FinerCNN encoder implemented (XFeat-style, 4 blocks, 64-dim output)
+- [x] Feature fusion: concat(384-dim, 64-dim) → Linear → 192-dim
+- [x] L2 normalization on final descriptors
+- [x] Verified: shape `(B, 512, 192)`, norm error < 1.2e-07, 151K trainable params
+- See: [`src/models/README_phase4_feature_descriptor.md`](src/models/README_phase4_feature_descriptor.md)
+
+### 📋 Phase 5–9: Upcoming
+- Phase 5: Feature Matching (Transformer, L=12 layers, rotary positional encoding)
+- Phase 6: Pose Estimation (Weighted 8-point, Essential matrix, cheirality check)
+- Phase 7: Loss Functions (Matching loss Eq.12 + Pose loss Eq.13)
 - Phase 8: Training Pipeline
-- Phase 9: Evaluation
+- Phase 9: Evaluation (ATE on EuRoC MH_01_easy)
 
 For detailed implementation order, see [CLAUDE.md](CLAUDE.md).
 
