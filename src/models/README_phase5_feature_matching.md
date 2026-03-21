@@ -11,7 +11,7 @@ The Feature Matching module establishes **correspondences between keypoints** in
 
 It uses a **transformer architecture** (inspired by LightGlue) with:
 - **Self-attention** with 2D Rotary Positional Encoding (spatial context within each image)
-- **Cross-attention** (inter-image context for matching)
+- **Cross-attention** with key-key dot product (inter-image context, Eq. 4)
 - **Dual-softmax assignment** for soft correspondence probabilities
 - **Confidence MLP** for per-match reliability weights
 
@@ -69,11 +69,12 @@ m_i^{T<-S} = Sum_j softmax(a_ij)_j * v_j
 ```
 Standard multi-head attention value aggregation.
 
-### Eq. 4: Attention Score with RoPE
+### Eq. 4: Attention Score
 ```
-a_ij = (R(p_i) * q_i)^T (R(p_j) * k_j) / sqrt(d)
+Self-attention:  a_ij = (R(p_i) * q_i)^T (R(p_j) * k_j) / sqrt(d)
+Cross-attention: a_ij = k_i^T k_j / sqrt(d)   (key-key, NOT q^T k)
 ```
-Scaled dot-product attention where R(p) applies 2D rotary positional encoding based on keypoint pixel coordinates. Used in self-attention only (not cross-attention, since positions are in different coordinate frames).
+Self-attention uses standard Q-K attention with 2D RoPE encoding on normalized [0,1] keypoint coordinates. Cross-attention uses key-key dot product (no queries, no positional encoding), as the paper explicitly specifies.
 
 ### Eq. 5: Assignment Matrix (Dual-Softmax)
 ```
@@ -105,7 +106,7 @@ Per-match confidence used by the weighted 8-point algorithm in Phase 6.
 
 ### Step 1: Precompute 2D Rotary Positional Encoding
 
-For each keypoint's (x, y) pixel coordinates, compute sin/cos rotation tensors. The head dimension (64) is split in half:
+Keypoint pixel coordinates are normalized to [0, 1] range (per paper: `p_i := (x_i, y_i) in [0, 1]^2`). The head dimension (64) is split in half:
 - First 32 dimensions encode the x-coordinate
 - Second 32 dimensions encode the y-coordinate
 
@@ -121,9 +122,9 @@ Each of the 12 layers performs:
 - Scaled dot-product attention
 - Residual connection
 
-**2b. Cross-attention** (between images, no RoPE):
-- LayerNorm -> Q from image 1, K/V from image 2 (and vice versa)
-- Standard multi-head attention (no positional encoding)
+**2b. Cross-attention** (between images, key-key, Eq. 4):
+- LayerNorm -> K from target image, K/V from source image
+- Key-key dot product: `a_ij = k_i^T k_j` (no query projection, no RoPE)
 - Cross-attention message `m_i`
 
 **2c. Feed-forward update** (Eq. 2):

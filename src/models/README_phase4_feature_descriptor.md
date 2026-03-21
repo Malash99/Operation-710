@@ -84,15 +84,23 @@ DINOv2 is called with `torch.no_grad()` — all its parameters are frozen. No gr
 
 ### Step 2: FinerCNN Dense Feature Extraction
 
-FinerCNN is a 4-block convolutional encoder (XFeat-style) that processes the full grayscale image at native resolution:
+FinerCNN is a feature pyramid encoder (XFeat-style, Fig. 4) that processes the full grayscale image through a downsample path and fuses features at multiple scales:
 
 ```
 Input:  (B, 1, H, W)  — grayscale [0, 1]
 Output: (B, 64, H, W) — dense feature map (same resolution)
 ```
 
-Blocks: `1→32 (Conv+BN+ReLU)` → `32→32` → `32→64` → `64→64`
-All convolutions use kernel=3, padding=1 to preserve spatial size.
+**Downsample path** (feature pyramid, expands receptive field to H/16):
+- Block 0: Input(1ch) → H x W x 64
+- Block 1: stride-2 → H/2 x W/2 x 64
+- Block 2: stride-2 → H/4 x W/4 x 64
+- Block 3: stride-2 → H/8 x W/8 x 64
+- Block 4: stride-2 → H/16 x W/16 x 64
+
+**Fusion path** (combines multi-scale information):
+1. Upsample H/16 → H/4, fuse with H/4 skip (1x1 Conv + bilinear upsample + add)
+2. Upsample H/4 → H x W, fuse with H x W skip (1x1 Conv + bilinear upsample + add)
 
 Since the dataset loader gives 3-channel ImageNet-normalized tensors, FinerCNN first recovers grayscale by reversing channel 0 normalization:
 ```
@@ -126,23 +134,31 @@ f_i   = L2_normalize(f_i)             → unit norm
 
 ---
 
-## Architecture: FinerCNN
+## Architecture: FinerCNN (Fig. 4)
 
 ```
 Input: (B, 1, H, W)
     ↓
-Conv2d(1→32, k=3, p=1) + BN + ReLU
+Block 0: Conv2d(1→64, k=3, s=1, p=1) + BN + ReLU     → H x W x 64
     ↓
-Conv2d(32→32, k=3, p=1) + BN + ReLU
+Block 1: Conv2d(64→64, k=3, s=2, p=1) + BN + ReLU    → H/2 x W/2 x 64
     ↓
-Conv2d(32→64, k=3, p=1) + BN + ReLU
+Block 2: Conv2d(64→64, k=3, s=2, p=1) + BN + ReLU    → H/4 x W/4 x 64  (skip →)
     ↓
-Conv2d(64→64, k=3, p=1) + BN + ReLU
+Block 3: Conv2d(64→64, k=3, s=2, p=1) + BN + ReLU    → H/8 x W/8 x 64
     ↓
-Output: (B, 64, H, W)   — no downsampling
+Block 4: Conv2d(64→64, k=3, s=2, p=1) + BN + ReLU    → H/16 x W/16 x 64
+    ↓
+    ↓  Upsample to H/4, 1x1 Conv, add with Block 2 skip
+    ↓  Conv2d(64→64, k=3, p=1) + BN + ReLU             → H/4 x W/4 x 64
+    ↓
+    ↓  Upsample to H×W, 1x1 Conv, add with Block 0 skip
+    ↓  Conv2d(64→64, k=3, p=1) + BN + ReLU             → H x W x 64
+    ↓
+Output: (B, 64, H, W)   — full resolution via feature pyramid fusion
 ```
 
-**Trainable parameters:** ~37K (very lightweight)
+**Trainable parameters:** ~231K (lightweight)
 
 ---
 
