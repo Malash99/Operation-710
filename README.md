@@ -223,8 +223,15 @@ L_pose: Rotation + Translation loss (Eq. 13)
 - [x] Clean correspondences: rotation error 0.0000 deg, translation error 0.0198 deg
 - See: [`src/models/README_phase6_pose_estimation.md`](src/models/README_phase6_pose_estimation.md)
 
-### 📋 Phase 7–9: Upcoming
-- Phase 7: Loss Functions (Matching loss Eq.12 + Pose loss Eq.13)
+### ✅ Phase 7: Loss Functions (COMPLETE)
+- [x] Matching loss: NLL of assignment matrix at GT correspondences (Eq. 12)
+- [x] Pose loss: lambda_r=180 * rotation error + lambda_t=400 * translation error (Eq. 13)
+- [x] Combined loss with lambda_p scheduling: 0.0 -> 0.9 (Eq. 14)
+- [x] Differentiable SO(3) log map (Rodrigues formula) for rotation error
+- [x] Verified: all gradients flow, perfect-match loss ~0, scheduling caps at 0.9
+- See: [`src/losses/README_phase7_loss_functions.md`](src/losses/README_phase7_loss_functions.md)
+
+### 📋 Phase 8–9: Upcoming
 - Phase 8: Training Pipeline
 - Phase 9: Evaluation (ATE on EuRoC MH_01_easy)
 
