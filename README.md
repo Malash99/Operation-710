@@ -214,8 +214,16 @@ L_pose: Rotation + Translation loss (Eq. 13)
 - [x] Verified: 6.3M trainable params, 110ms forward, 169 MB GPU, gradients flow
 - See: [`src/models/README_phase5_feature_matching.md`](src/models/README_phase5_feature_matching.md)
 
-### 📋 Phase 6–9: Upcoming
-- Phase 6: Pose Estimation (Weighted 8-point, Essential matrix, cheirality check)
+### ✅ Phase 6: Pose Estimation (COMPLETE)
+- [x] Weighted 8-point algorithm with differentiable SVD (Eq. 10-11)
+- [x] Essential matrix projection (enforce rank-2, equal singular values)
+- [x] Decomposition into 4 (R, t) candidates
+- [x] Cheirality check via triangulated depth (selects correct pose)
+- [x] Verified: 0 params (geometric layer), det(R)=1.000001, epipolar err=7.6e-08
+- [x] Clean correspondences: rotation error 0.0000 deg, translation error 0.0198 deg
+- See: [`src/models/README_phase6_pose_estimation.md`](src/models/README_phase6_pose_estimation.md)
+
+### 📋 Phase 7–9: Upcoming
 - Phase 7: Loss Functions (Matching loss Eq.12 + Pose loss Eq.13)
 - Phase 8: Training Pipeline
 - Phase 9: Evaluation (ATE on EuRoC MH_01_easy)

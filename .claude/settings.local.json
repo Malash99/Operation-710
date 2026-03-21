@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(python scripts/test_feature_matching.py)",
+      "Bash(python scripts/test_pose_estimation.py)"
     ]
   }
 }
