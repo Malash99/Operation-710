@@ -4,7 +4,14 @@
       "WebSearch",
       "Bash(pip install:*)",
       "Bash(python scripts/test_feature_matching.py)",
-      "Bash(python scripts/test_pose_estimation.py)"
+      "Bash(python scripts/test_pose_estimation.py)",
+      "Bash(python scripts/test_losses.py)",
+      "Bash(python -c \":*)",
+      "Bash(python scripts/test_audit_fixes.py)",
+      "Bash(PYTHONPATH=. python scripts/test_audit_fixes.py)",
+      "Bash(PYTHONPATH=. python scripts/test_feature_descriptor.py)",
+      "Bash(gh pr:*)",
+      "Bash(python -m scripts.test_stereo_depth)"
     ]
   }
 }

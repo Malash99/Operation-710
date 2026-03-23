@@ -1,0 +1,1673 @@
+--- PAGE 1 ---
+IEEE ROBOTICS AND AUTOMATION LETTERS. PREPRINT VERSION. ACCEPTED JULY, 2025
+1
+DINO-VO: A Feature-based Visual Odometry
+Leveraging a Visual Foundation Model
+Maulana Bisyir Azhari1 and David Hyunchul Shim1
+Abstract—Learning-based monocular visual odometry (VO)
+poses robustness, generalization, and efficiency challenges in
+robotics. Recent advances in visual foundation models, such
+as DINOv2, have improved robustness and generalization in
+various vision tasks, yet their integration in VO remains limited
+due to coarse feature granularity. In this paper, we present
+DINO-VO, a feature-based VO system leveraging DINOv2 visual
+foundation model for its sparse feature matching. To address the
+integration challenge, we propose a salient keypoints detector tai-
+lored to DINOv2’s coarse features. Furthermore, we complement
+DINOv2’s robust-semantic features with fine-grained geometric
+features, resulting in more localizable representations. Finally,
+a transformer-based matcher and differentiable pose estimation
+layer enable precise camera motion estimation by learning good
+matches. Against prior detector-descriptor networks like Super-
+Point, DINO-VO demonstrates greater robustness in challenging
+environments. Furthermore, we show superior accuracy and gen-
+eralization of the proposed feature descriptors against standalone
+DINOv2 coarse features. DINO-VO outperforms prior frame-to-
+frame VO methods on the TartanAir and KITTI datasets and
+is competitive on EuRoC dataset, while running efficiently at
+72 FPS with less than 1GB of memory usage on a single GPU.
+Moreover, it performs competitively against Visual SLAM sys-
+tems on outdoor driving scenarios, showcasing its generalization
+capabilities.
+Index Terms—Deep Learning Methods; Localization; Visual
+Odometry; Visual Foundation Model.
+I. INTRODUCTION
+V
+ISUAL ODOMETRY (VO) is a technique used to es-
+timate the motion of a camera or robot by analyzing
+changes in visual data captured from consecutive images.
+VO is a critical component of many modern technologies,
+including autonomous vehicles, drones, augmented reality, and
+robotics. However, acquiring robust and accurate VO is chal-
+lenging in environments with low visual texture, poor lighting,
+rapid motion, and dynamic objects. Traditional VO methods
+extract a set of keypoints using handcrafted features [1] or
+directly from pixel intensities [2], associate them in successive
+frames, recover the camera motion, and optimize the poses
+and structures. However, they lack robustness in low-texture
+Manuscript received: March, 25, 2025; Revised June, 12, 2025; Accepted
+July, 13, 2025.
+This paper was recommended for publication by Editor Sven Behnke
+upon evaluation of the Associate Editor and Reviewers’ comments. This
+work was financially supported by the Institute of Civil Military Technology
+Cooperation funded by the Defense Acquisition Program Administration and
+Ministry of Trade, Industry, and Energy of Korean goverment under grant No.
+UM222006RD2. (Corresponding author: David Hyunchul Shim.)
+1The authors are with the School of Electrical Engineering, Korea Ad-
+vanced Institute of Science and Technology, Daejeon 305701, South Korea
+(e-mail: mbazhari@kaist.ac.kr; hcshim@kaist.ac.kr).
+Digital Object Identifier (DOI): see top of this page.
+(b)
+(c)
+(d)
+Input frames
+Coarse yet robust 
+semantic features
+Fine-grained 
+geometric features
+Learned good 
+matches
+Keypoints
+detection
+(a)
+(e)
+Fig. 1.
+High-level overview of DINO-VO. (a) The proposed keypoints
+detection query its corresponding (b) coarse yet robust semantic features from
+visual foundation model and (c) fine-grained localizable geometric features.
+(d) The keypoints are matched along with their predicted confidences (showing
+the 20 highest and 20 lowest-confidence matches). (e) Trajectory estimation on
+TartanAir dataset sequence MH000, where DINO-VO tracks the ego-motion
+in a frame-to-frame manner with low-drift.
+environments, under variable lighting, and in dynamic object
+scenarios. Recent works have aimed to improve robustness
+by utilizing learning-based features [3], [4] or via end-to-end
+learning frameworks [5]–[10] with auxiliary objectives such as
+depth and/or optical flow. Nonetheless, these methods struggle
+with generalization [3]–[6] and are memory-intensive [8]–[10].
+Recently, visual foundation models [11], [12] have demon-
+strated promising results in improving both robustness and
+generalization across various tasks. Specifically, DINOv2 [12],
+a strong pre-trained image encoder based on Vision Trans-
+former (ViT) [13], has been demonstrated to perform well
+in other vision tasks [14]–[18]. DINOv2 has the potential of
+improving the robustness and generalization ability in VO.
+However, the direct application of DINOv2 on VO is not
+straightforward, as the ViT encoder results in coarse features
+due to patchification [15], [17].
+In this paper, we introduce DINO-VO, a novel approach that
+leverages DINOv2 visual foundation model [12] to improve
+robustness and generalization for a sparse feature-based VO.
+The high-level overview of DINO-VO is depicted in Fig. 1. To
+address the issue of coarse features, we propose a lightweight
+keypoints detector specifically designed to align with DI-
+NOv2’s coarseness. We further employ a lightweight CNN
+encoder to enhance keypoint localization by providing fine-
+grained, low-level geometric features. Furthermore, we uti-
+lize transformer-based feature matching [19] to find keypoint
+correspondences. The utilization of learning-based matching
+layers, particularly transformer-based methods, has proven
+highly beneficial and demonstrated strong performance [15],
+[19], [20]. When coupled with a learned differentiable pose
+estimation layer [21], this approach allows us to focus directly
+on learning good matches for estimating camera motion.
+To summarize, our contributions are as follows:
+© 2025 IEEE. Personal use of this material is permitted. Permission from IEEE must be obtained for all other uses, in any current or future media, including
+reprinting/republishing this material for advertising or promotional purposes, creating new collective works, for resale or redistribution to servers or lists, or
+reuse of any copyrighted component of this work in other works.
+arXiv:2507.13145v1  [cs.CV]  17 Jul 2025
+
+
+--- PAGE 2 ---
+2
+IEEE ROBOTICS AND AUTOMATION LETTERS. PREPRINT VERSION. ACCEPTED JULY, 2025
+Differentiable Pose Layer
+Weighted 
+8-Point Algorithm
+Salient Keypoint Detector
+Feature Descriptor
+Image Pair
+Feature Matching
+Matching Layer
+Feature Transformer
+Self
+Self
+Cross
+xL
+Assignment Matrix
+Gaussian
+Sobel
+MaxPooling
+NMS
+Keypoint queries
+FinerCNN
+DINOv2-VIT
+Conf 
+MLP
+Positional Encoding
+Local Features
+Correspondences
+Global Features
+Matching Loss 
+Gradient Flow
+Pose Loss 
+Gradient Flow
+Confidences
+Keypoints
+Relative Pose 
+𝐓= [𝑹|𝒕]
+Frozen
+Concatenation
+Summation
+𝐼𝑡
+𝐼𝑡+1
+𝐼𝑡
+𝐼𝑡+1
+Fig. 2.
+Overall architecture of the proposed method. The visual odometry (VO) system receives a pair of images {It, It+1} and predict its relative
+transformation T = [R|t]. The proposed method consists of 4 modules. First, the keypoints detector detects salient keypoints of each image that align
+with the coarseness of the DINOv2-ViT feature descriptor. Second, the keypoints query its feature descriptor generated by DINOv2-ViT Encoder –which
+provides robust and generalizable features– accompanied by a lightweight CNN Encoder to provide low-level geometrical and localizable features. Third, a
+transformer-based feature matching network is employed to get keypoint correspondences along with its confidence. Lasty, a differentiable pose layer predicts
+the image’s transformation given its keypoint correspondences and confidences.
+• DINO-VO is a novel VO framework that directly lever-
+ages DINOv2 [12] visual foundation model features re-
+sulting in a robust and general system.
+• We propose a salient keypoints detector and a fine-
+grained geometric descriptor to complement DINOv2
+coarse features, which are lightweight yet significantly
+improve the VO performance.
+• We validate DINO-VO on TartanAir, EuRoC, and KITTI
+datasets, achieving state-of-the-art performances com-
+pared to prior frame-to-frame VO methods. We further
+show the efficacy of our design choices on various
+sequences.
+II. RELATED WORK
+A. Learned Monocular Visual Odometry
+The first notable learning-based VO is DeepVO [5], which
+presents an end-to-end VO using deep RCNNs. D3VO [22]
+integrates depth, pose, and uncertainty estimations in its
+sparse direct visual odometry framework. TartanVO [7] and
+iSLAM [23] estimate camera motion using optical flow pre-
+diction and an intrinsics camera layer, enabling out-of-domain
+evaluation and real-world use. DiffposeNet [24] predicts nor-
+mal flow for pose estimation via a differentiable cheirality
+layer. XVO [25] utilizes multimodal supervision to achieve
+generalization across diverse driving scenarios. Other methods
+such as DROID-SLAM [8], DPVO [9] and DPV-SLAM [10]
+integrate RAFT [26] in an end-to-end system combining
+optical flow and uncertainty estimation using iterative GRU
+updates, followed by geometric optimization via bundle ad-
+justment. However, these systems [8]–[10] mostly rely on
+dense optical flow prediction which requires intensive memory
+and/or computation. Despite the effort of using ”sparse patch”
+in their optical flow matching processes, [9] and [10] will
+still require storing the dense feature map for the optical-flow
+matching process.
+B. Foundation Models for Computer Vision Tasks
+Foundation models for computer vision have advanced
+rapidly in recent years [11], [12]. DINOv2 [12], in particular,
+RGB Image
+Gradient & MaxPooling
+NMS & Thresholding
+Fig. 3. Visualization of salient keypoints detector. left: input image. middle:
+gradient map and salient point selection on each grid, shown in blue. right:
+the red, orange, and black points correspond to removed points after NMS,
+thresholding, and top-k selections, respectively. The green points are the
+chosen keypoints and will be used to query feature descriptors.
+introduced a scalable self-supervised approach that produces
+high-quality visual features without labeled data, achieving
+state-of-the-art results across various perception tasks [14]–
+[18]. RoMa [15] utilized DINOv2 for coarse matching in a
+two-stage dense image matching task, refined by a special-
+ized ConvNet, achieving state-of-the-art performance across
+multiple datasets. Similarly, Dino-tracker [17] used DINOv2
+for a dense pixel-tracking task. MambaVO [27] uses DINOv2
+features in its demi-dense matching which are then refined
+using the Geometric Mamba Module. In sparse matching
+task, DINOv2 guided the matching layer in OmniGlue [16],
+significantly improving zero-shot generalization. However, DI-
+NOv2’s coarse feature map complicates its integration into
+tasks requiring pixel-level accuracy, such as visual odometry.
+Unlike previous approaches [15]–[17], [27], we aim to use
+DINOv2 directly in one-stage sparse image matching to meet
+the real-time requirement of visual odometry.
+III. METHOD
+The objective of our work is to predict the relative transfor-
+mation T = [R|t], composed of rotation matrix R ∈SO(3)
+and up-to-scale translation vector t ∈R3, between two
+consecutive images {It, It+1} ∈RH×W ×3 for a VO frontend
+system. As shown in Fig. 2, our proposed VO system integrates
+four key components: a salient keypoints detector, a feature de-
+scriptor networks that utilize DINOv2 along with a lightweight
+CNN encoder, a transformer-based feature matching layer, and
+a differentiable pose layer.
+
+
+--- PAGE 3 ---
+AZHARI et al.: DINO-VO: A FEATURE-BASED VISUAL ODOMETRY LEVERAGING A VISUAL FOUNDATION MODEL
+3
+DINOv2-VIT Encoder
+DINOv2-VIT Encoder
+𝐻
+2 × 𝑊
+2 × 64
+Downsample CNN
+CNN
+1x1 Conv + Upsample
+Fusion Block
+Feature Tensor
+𝐻
+4 × 𝑊
+4 × 64
+𝐻
+8 × 𝑊
+8 × 64
+𝐻
+16 × 𝑊
+16 × 64
+𝐻
+4 × 𝑊
+4 × 64
+𝐻× 𝑊× 64
+𝐻× 𝑊× 64
+𝐻
+14 × 𝑊
+14 × 384
+Input Image
+Flatten Feature
+𝐹𝐷𝐼𝑁𝑂
+𝐹𝐹𝐼𝑁𝐸
+FinerCNN Encoder
+Fig. 4. Feature descriptor networks. It consists of two encoders: a DINOv2-
+ViT and a specialized lightweight CNN encoder, FinerCNN.
+A. Salient Keypoints Detector
+As noted in [16], combining SuperPoint [28] with DI-
+NOv2’s coarse features poses challenges in sparse match-
+ing. RoMa [15] showed DINOv2 lacks precise localization,
+prompting two stage dense matching, but its high compu-
+tational cost limits real-time VO. Our proposed keypoints
+detector queries DINOv2 features from sparse salient points,
+enabling precise, one-stage matching with low computational
+demands. The visualization of the proposed keypoints detector
+is depicted in Fig. 3.
+The keypoints detector computes the gradient map using
+a GaussianFilter and a SobelFilter. The gradient map is
+then divided into H/rP × W/rP grids, aligning keypoints
+with DINOv2 coarse features, where rP = 14 corresponds
+to the patch size of the DINOv2-ViT. We select the point
+with the highest gradient magnitude in each grid using a
+MaxPooling operator with a kernel size of rP and a stride
+of rP, resulting in the most salient point in each grid (shown
+in blue). Oftentimes, the salient points are located at the
+grid borders, leading to keypoints that are very close to one
+another, making them redundant (shown in red). To address
+this, we apply NonMaxSuppression (NMS) [28] with a radius
+of rNMS. In addition to removing redundant points, a large
+rNMS ensures that keypoints are well-distributed across the
+image, which improves the robustness and accuracy of pose
+estimation. Finally, we filter out keypoints with very small
+gradient magnitudes (shown in orange) and select the top-
+k keypoints based on their gradient magnitudes (shown in
+green). The output, keypoint locations K = {(xi, yi)}K
+i=1
+where xi ∈[1, H] and yi ∈[1, W], is then used to query
+features described in the next subsection.
+B. Feature Descriptor
+As shown in Fig. 4, the proposed feature descriptor consists
+of two networks: DINOv2 and FinerCNN. The DINOv2
+encoder extracts generalizable and robust semantic features for
+our matching process and produces a feature map FDINO ∈
+R
+H
+14 × W
+14 ×384. To complement DINOv2 coarse features, we
+employ FinerCNN to provide fine-grained low-level geometric
+features. FinerCNN is built from CNN blocks called basic
+layers, inspired by XFeat [29], which has shown great perfor-
+mance in image matching while having lightweight design. We
+adopt the feature pyramid approach to expand the receptive
+field until the resolution is reduced to H/16 × W/16. The
+intermediate features are then fused at H/4×W/4 and H×W
+resolution levels as shown in Fig. 4. FinerCNN generates a
+feature map FFINE ∈RH×W ×64 that has the same spatial
+dimension as the input image providing the optimal localizable
+features at pixel-level resolution.
+For each keypoint location (xi, yi) ∈K, we directly retrieve
+its corresponding feature from the feature map by indexing it
+as f i
+FINE := FFINE(xi, yi, :) ∈R64. To query its corresponding
+feature in FDINO, we apply division and floor operations to
+the keypoint location f i
+DINO := FDINO(⌊xi
+14⌋, ⌊yi
+14⌋, :) ∈R384.
+Finally, the two features are concatenated, and a Linear
+projector is used to reduce the dimensionality.
+fi = Linear([f i
+DINO|f i
+FINE]) ∈R192 .
+(1)
+where [·|·] concatenates two vectors in the channel dimension.
+C. Feature Matching
+Given two consecutive images It and It+1, we extract K
+features f It
+i
+∈R192 indexed by Kt = {(xi, yi)}K
+i=1 for image
+It and f It+1
+j
+∈R192 indexed by by Kt+1 = {(xj, yj)}K
+j=1
+for image It+1, using feature descriptor explained in previous
+subsection. Features from the two images are matched by
+predicting a partial assignment M = {(i, j)} ⊂Kt × Kt+1.
+We use learnable feature matching based on Transformer
+architecture, as it has been shown to be more robust com-
+pared to traditional feature matching methods [16], [19], [30].
+Specifically, following [19], we use L identical transformer
+layers consisting of self-attention and cross-attention units to
+process the local features into features with global context. In
+each attention unit, the feature descriptor f T
+i is updated using
+the following formulas:
+f T
+i ←f T
+i + MLP([f T
+i |mT ←S
+i
+]), with
+(2)
+mT ←S
+i
+=
+X
+j∈S
+Softmax
+ aT S
+ij
+
+j vj, and
+(3)
+aT S
+ij
+=
+(
+q⊤
+i RP(xj −xi) kj,
+for self-attention
+kT
+i
+⊤kS
+j
+!= aST
+ji ,
+for cross-attention
+(4)
+where mT ←S
+i
+is the aggregated message from a source image
+S ∈{It, It+1} to a target image T ∈{It, It+1} using attention
+mechanism. aT S
+ij
+is the attention score between feature i
+of image T and feature j of image S which is computed
+differently in the self- and cross-attention unit using Eq. 4,
+with S = T in the self-attention and S = {It, It+1}\T in the
+cross-attention. ki, qi, and vi are the key, query and value
+vector of linearly projected fi, respectively. RP(·) ∈Rd×d is
+a rotary positional encoding [31] and pi := (xi, yi) ∈[0, 1]2
+is the normalized keypoint location of feature i.
+The point correspondences can be obtained by combining
+the feature similarity Sij and feature-wise matchability scores
+σi, σj into a soft partial assignment matrix P ∈[0, 1]K×K as
+Pij = σi σj Softmax
+k∈Kt
+(Skj)i Softmax
+k∈Kt+1 (Sik)j, where
+(5)
+Sij = Linear
+
+f It
+i
+
+⊤Linear
+
+f It+1
+j
+
+, and
+(6)
+σi = Sigmoid
+
+Linear(f It
+i )
+
+∈[0, 1],
+(7)
+σj = Sigmoid
+
+Linear(f It+1
+j
+)
+
+∈[0, 1],
+(8)
+
+
+--- PAGE 4 ---
+4
+IEEE ROBOTICS AND AUTOMATION LETTERS. PREPRINT VERSION. ACCEPTED JULY, 2025
+A pair of points (i, j) yields a correspondence when both
+points are predicted as matchable and when their similarity
+is higher than any other point in both images. Furthermore,
+for each pair of matching points (i, j) a confidence weight
+wij is predicted from the final layer descriptor f It
+i
+and f It+1
+j
+as:
+wij = ConfMLP
+h
+f It
+i |f It+1
+j
+i
+.
+(9)
+D. Differentiable Pose Estimation
+We utilize a confidence-weighted eight-point algorithm as
+the differentiable pose layer to estimate the relative pose
+between two images given its corresponding points. The
+weighted eight-point algorithm has shown to be useful and
+efficient for providing supervision to the matching layer to
+learn good matches for pose estimation [21]. For each pair
+of corresponding points xKt
+i
+= [xi, yi, 1]T and xKt+1
+j
+=
+[xj, yj, 1]T with x, y ∈[0, 1], the essential matrix E ∈R3×3
+satisfies the following equation:
+xT
+j Exi = 0 ,
+(10)
+By
+stacking
+the
+known
+coordinates
+of
+corre-
+spondences
+into
+a
+matrix
+Φ,
+where
+each
+row
+[xixj, xiyj, x, yixj, yiyj, y, xj, yj, 1]
+describes
+one
+correspondence
+and
+flattening
+E
+into
+flat(E)
+=
+[e11, e12, e13, e21, e22, e23, e31, e32, e33]T ,
+we
+can
+rewrite
+the confidence-weighted version of the eight-point algorithm
+into a matrix equation
+diag(w)Φ flat(E) = 0 ,
+(11)
+where w is the weight vector obtained by stacking the corre-
+sponding wij of every match from (9).
+We
+solve
+the
+Eq.
+(11)
+by
+using
+Singular
+value
+decomposition
+(SVD)
+of
+diag(w)Φ,
+which
+minimizes
+∥diag(w) flat(E)∥2 and enforcing E to have rank 2. E can
+be decomposed into multiple relative transformations T, the
+best T is then chosen by using cheirality condition [32].
+E. Supervision
+Following [19], we supervise the assignment matrix P using
+ground truth labels derived from two-view transformations
+and pixel-wise depth. We minimize the log-likelihood of the
+assignment predicted at each layer ℓ. The matching objective
+Lm is defined as:
+Lm = −1
+L
+X
+ℓ
+ 
+1
+|M|
+X
+(i,j)∈M
+log ℓPij
++
+1
+2| ¯Kt|
+X
+i∈¯Kt
+log
+
+1 −ℓσKt
+i
+
++
+1
+2| ¯Kt+1|
+X
+j∈¯Kt+1
+log
+
+1 −ℓσKt+1
+j
+ !
+.
+(12)
+where ¯Kt ⊆Kt and ¯Kt+1 ⊆Kt+1 are unmatchable keypoints.
+We also minimize the difference between the predicted
+transformation ˆT = [ ˆR|ˆt] ∈Sim(3) and the ground-truth
+T = [R|t] ∈SE(3) as the up-to-scale pose objective Lp
+following [7] to handle scale ambiguity in monocular setting,
+which is defined as:
+Lp = λt
+
+ˆt
+max(||ˆt||, ϵ) −
+t
+max(||t||, ϵ)
+
++ λr∥Log( ˆR) −Log(R)∥.
+(13)
+where ϵ = 1e−6 to stabilize the numerical division, λt and
+λr are the weighting factor for the translation and rotation
+objective, respectively. Log(·) is a mapping function from
+SO(3) to so(3). The pose objective guides the matching layer
+to down-weight matches that are detrimental to pose accuracy.
+The overall objective Lt is defined as a weighted summation
+of both objectives:
+Lt = (1 −λp)Lm + λpLp.
+(14)
+where = λp is the weighting factor of the pose objective.
+F. DINO-VO
+DINO-VO predicts the relative pose to the latest keyframe,
+which is selected when the mean pixel displacement of pre-
+dicted correspondences exceeds 24px. This ensures sufficient
+parallax, thereby mitigating instabilities from pure rotation or
+minimal translation of the weighted 8-point algorithm [33].
+Furthermore, alternate frames are processed for EuRoC and
+KITTI datasets, this step is unnecessary for the TartanAir MH
+dataset due to its inherently significant camera motion. All
+frame’s poses are saved relative to its previous keyframe such
+that the full camera trajectory is obtained.
+Since DINO-VO only predicts up-to-scale transformation,
+we follow [7] to scale the predicted translation t ∈R3
+with the ground-truth. DINO-VO uses the image resolution
+of 476×630, 476×742, and 364×1008 for TartanAir, EuRoC,
+and KITTI sequences, respectively.
+IV. EXPERIMENTS
+A. Implementation Details
+1) Detector and Networks Details: We use GaussianFilter
+with kernel size 5 and std = 2.0, MaxPooling with kernel size
+of rP = 14 following the patch-size of DINOv2-ViT-s encoder
+[12], rNMS = 8, gradient threshold of 0.01. We select the top
+512 keypoints for image matching and pose estimation. We
+utilize LightGlue [19] as the matching layer with 12 layers, 3
+attention heads with 64 head dimensions.
+2) Training Procedure: We use only TartanAir dataset [34]
+for training. We train the model with matching objective Lm
+for the first 4 epochs and total objective Lt for the next 10
+epochs. We use λr = 180, λt = 400, and λp = 0.0 up to
+λp = 0.9 with 1.5 × 10−4 increment per step starting from
+epoch 5. We use a computer equipped with an RTX4090 GPU
+and an intel i9-12900k CPU with PyTorch. The entire training
+procedure takes about 3 days.
+3) Metrics:
+Following prior works [7], [9], we report
+Absolute Trajectory Error (ATE) in meter for TartanAir MH,
+EuRoC, and KITTI datasets. Additionally, we report RMSE
+drift translational trel (%) and rotational rrel (deg/100m) on
+KITTI dataset [35] sequences 6, 7, 9, and 10.
+
+
+--- PAGE 5 ---
+AZHARI et al.: DINO-VO: A FEATURE-BASED VISUAL ODOMETRY LEVERAGING A VISUAL FOUNDATION MODEL
+5
+TABLE I
+ATE[M]↓ON THE MH SEQUENCES OF TARTANAIR DATASET.
+Multi-Frame VO
+Frame-to-Frame VO
+Sequence
+(MH)
+SVO [36]
+DSO [2]
+DeepV2D [6]
+DROID-VO
+[8]
+DPVO [9]
+TartanVO [7]
+DiffPoseNet
+[24]
+Ours
+(DINO-VO)
+000
+14.42
+9.65
+6.15
+0.32
+0.21
+4.88
+2.56
+0.87
+001
+1.17
+0.35
+2.12
+0.13
+0.04
+0.26
+0.31
+0.19
+002
+4.97
+7.96
+4.54
+0.08
+0.04
+2.00
+1.57
+0.28
+003
+6.88
+3.46
+3.89
+0.09
+0.08
+0.94
+0.72
+0.25
+004
+X
+X
+2.71
+1.52
+0.58
+1.07
+0.82
+1.19
+005
+19.2
+12.58
+11.55
+0.69
+0.17
+3.19
+1.83
+0.92
+006
+11.27
+8.42
+5.53
+0.39
+0.11
+1.00
+1.32
+0.23
+007
+17.68
+7.50
+3.76
+0.97
+0.15
+2.04
+1.24
+0.73
+Avg
+X
+X
+5.03
+0.52
+0.17
+1.92
+1.29
+0.58
+- The best and second best of frame-to-frame VO results are marked as bold
+and underlined.
+TABLE II
+ATE[M]↓ON THE EUROC MAV DATASET.
+Multi-Frame VO
+Frame-to-Frame VO
+Sequence
+SVO [36]
+DSO [2]
+DeepV2D [6]
+DROID-VO
+[8]
+DPVO [9]
+TartanVO [7]
+iSLAM-VO∓
+[23]
+MAC-VO∓
+[37]
+Ours
+(DINO-VO)
+MH01
+0.100
+0.046
+1.614
+0.163
+0.087
+0.693
+0.320
+0.240
+0.150
+MH02
+0.120
+0.046
+1.492
+0.121
+0.055
+0.325
+0.462
+0.256
+0.118
+MH03
+0.410
+0.172
+1.635
+0.242
+0.158
+0.550
+0.380
+0.260
+0.254
+MH04
+0.430
+3.810
+1.775
+0.399
+0.137
+1.153
+0.962
+0.496
+0.982
+MH05
+0.300
+0.110
+1.013
+0.270
+0.114
+1.021
+0.500
+0.560
+0.454
+V101
+0.070
+0.089
+0.717
+0.102
+0.050
+0.447
+0.366
+0.197
+0.298
+V102
+0.210
+0.107
+0.695
+0.165
+0.140
+0.389
+0.414
+0.096
+0.260
+V102
+X
+0.903
+1.483
+0.158
+0.086
+0.622
+0.313
+0.198
+0.559
+V201
+0.110
+0.044
+0.839
+0.102
+0.057
+0.433
+0.478
+0.145
+0.334
+V202
+0.110
+0.132
+1.052
+0.115
+0.049
+0.749
+0.424
+0.270
+0.278
+V202
+1.080
+1.152
+0.592
+0.204
+0.211
+1.152
+1.176
+0.425
+0.763
+Avg
+X
+0.601
+1.173
+0.186
+0.105
+0.680
+0.527
+0.286
+0.404
+- The best and second best of frame-to-frame VO results are marked as bold
+and underlined.
+- ∓The method uses stereo camera setup.
+B. Monocular Visual Odometry Results
+In this section, we evaluate the accuracy and robustness
+of DINO-VO on TartanAir and EuRoC MAV datasets. For a
+fair comparison, we only numerically compare our method
+with frame-to-frame VO methods such as TartanVO [7],
+DiffposeNet [24], MAC-VO [37], and a stereo VO frontend
+of iSLAM [23], named iSLAM-VO. We also provide the
+results of the SOTA VO methods which perform multi-frame
+optimization such as SVO [36], DSO [2], DeepV2D [6],
+DROID-VO [8], and DPVO [9].
+In Table I, we present the evaluation of DINO-VO on
+TartanAir MH sequences, which span a variety of simulated
+environments with numerous challenges, including illumina-
+tion changes, dynamic objects, low-texture scenes, and signif-
+icant viewpoint variations—conditions that are challenging for
+many traditional methods [34]. Compared to other frame-to-
+frame VO approaches, DINO-VO demonstrates better accuracy
+in 7 out of 8 sequences. On average, DINO-VO reduces
+the ATE by 70% and 55% compared to TartanVO, and
+DiffPoseNet, respectively.
+In Table II, we evaluate DINO-VO on EuRoC dataset,
+TABLE III
+GENERALIZATION ASSESMENT AGAINST OTHER LEARNED
+FRAME-TO-FRAME VO METHODS ON KITTI ODOMETRY SEQUENCE 06,
+07, 09, AND 10 USING RMSE DRIFT↓trel AND rrel.
+Method
+Met.
+Sequence
+06
+07
+09
+10
+Avg
+Driving Scenarios
+Frame-to-Frame VO
+DeepVO [5]
+trel
+5.42
+3.91
+-
+8.11
+-
+rrel
+5.82
+4.60
+-
+8.83
+-
+DFVO [33]
+trel
+-
+-
+2.47
+1.96
+-
+rrel
+-
+-
+0.30
+0.31
+-
+HDVO∓[38]
+trel
+-
+-
+1.97
+1.89
+-
+rrel
+-
+-
+0.71
+0.56
+-
+XVO [25]
+trel
+3.92
+5.96
+-
+3.31
+-
+rrel
+1.46
+3.96
+-
+1.52
+-
+DualRefine [39]
+trel
+-
+-
+3.43
+6.80
+-
+rrel
+-
+-
+1.04
+1.13
+-
+ALH-VO∓[40]
+trel
+3.64
+2.53
+2.01
+2.01
+2.55
+rrel
+1.88
+1.46
+1.35
+1.32
+1.50
+General
+Frame-to-Frame VO
+TartanVO [7]
+trel
+4.72
+4.32
+6.00
+6.89
+5.48
+rrel
+2.95
+3.41
+3.11
+2.73
+3.05
+DiffPoseNet [24]
+trel
+2.93
+4.06
+4.02
+3.95
+3.74
+rrel
+1.76
+2.35
+0.51
+1.23
+1.46
+iSLAM-VO∓[23]
+trel
+4.30
+3.23
+4.22
+4.63
+4.09
+rrel
+1.16
+1.75
+1.41
+1.40
+1.43
+MAC-VO∓[37]
+trel
+2.91
+3.56
+6.89
+8.03
+5.34
+rrel
+1.74
+2.58
+2.69
+3.82
+2.70
+Ours (DINO-VO)
+trel
+1.65
+2.57
+1.64
+0.96
+1.70
+rrel
+0.82
+3.31
+0.93
+0.71
+1.44
+- trel (%) and rrel (deg/100m) are the average translational and rotational
+RMSE drift on various segments with length 100-800 m.
+- The best of each driving scenarios and general frame-to-frame VO results
+are underlined. The best overall results are bold.
+- ∓The method uses stereo camera setup.
+TABLE IV
+GENERALIZATION ASSESMENT AGAINST OTHER GENERAL SLAM/VO
+METHODS ON KITTI ODOMETRY SEQUENCE 0-10 USING ATE[M]↓.
+SLAM
+VO
+Sequence
+ORB-SLAM3
+[1]
+LDSO [41]
+DPV-SLAM++
+[10]
+MambaVO++
+[27]
+SVO [36]
+DSO [2]
+DROID-VO [8]
+DPVO [9]
+MambaVO [27]
+Ours
+(DINO-VO)
+00
+6.77
+9.32
+8.30
+6.19
+X
+126.7
+98.4
+113.2 112.4
+39.8
+01
+X
+11.68
+11.3
+8.04
+X
+165.0
+84.2
+12.7
+8.16
+24.8
+02
+30.5
+31.98
+39.6
+27.73
+X
+138.7 108.8 123.4 93.78
+42.6
+03
+1.04
+2.85
+2.50
+1.94
+X
+4.77
+2.58
+2.09
+1.80
+1.51
+04
+0.93
+1.22
+0.78
+0.59
+58.4
+1.08
+0.93
+0.68
+0.66
+0.35
+05
+5.54
+5.1
+5.74
+3.05
+X
+49.5
+59.2
+58.9
+56.51
+15.4
+06
+16.6
+13.55
+11.6
+11.79
+X
+113.6
+64.4
+54.8
+57.19
+3.91
+07
+9.70
+2.96
+1.52
+1.7
+X
+27.9
+24.2
+19.2
+17.9
+7.39
+08
+60.7
+129.0 110.9 105.4
+X
+120.2
+64.5
+115.9 116.0
+21.6
+09
+7.89
+21.64
+76.7
+63.24
+X
+74.3
+71.8
+75.1
+73.56
+7.16
+10
+8.65
+17.36
+13.7
+10.51
+X
+16.3
+16.9
+13.6
+14.37
+1.31
+Avg
+X
+22.42
+25.7
+21.84
+X
+76.3
+54.2
+53.6
+50.21
+15.1
+- The best of each SLAM and VO results are underlined. The best overall
+results are bold.
+which is well-known for its challenging sequence for learning-
+based methods due to lack of training data, challenging
+lighting conditions, and aggressive motion patterns. Compared
+to other frame-to-frame VO methods, DINO-VO achieves the
+lowest ATE on 4 out of 11 sequences in the EuRoC dataset,
+highlighting not only its generalization capabilities but also
+its accuracy and robustness, as it successfully completes all
+sequences without abrupt failures. DINO-VO reduces the ATE
+by 40% and 23% compared to TartanVO and iSLAM-VO,
+respectively. DINO-VO has a higher average ATE compared to
+MAC-VO, however, MAC-VO requires a stereo camera setup,
+6× GPU memory, and 13× inference time (see Sec. IV-D).
+
+
+--- PAGE 6 ---
+6
+IEEE ROBOTICS AND AUTOMATION LETTERS. PREPRINT VERSION. ACCEPTED JULY, 2025
+Ours 
+(DINO-VO)
+TartanVO
+iSLAM-VO
+DPVO
+DROID-VO
+MAC-VO
+Memory Usage (GB)
+Inference Time (ms)
+Fig. 5. Inference time and memory usage comparison on EuRoC sequences
+using a single RTX4090 GPU and i9-12900k CPU. DINO-VO uses 476×742
+image input and half-precision inference (FP16) while other methods follow
+their default implementation.
+TABLE V
+TIMING BREAKDOWN OF DINO-VO.
+tDet
+tFinerCNN
+tDINOv2
+tMatch
+tPose
+tTotal
+0.65 ms
+1.10 ms
+4.05 ms
+3.85 ms
+4.15 ms
+13.8 ms
+C. Generalization to Outdoor Driving Scenarios
+We evaluate the generalization ability of DINO-VO on
+KITTI dataset [35] which contains outdoor driving sequences,
+featuring dynamic objects such as cars and pedestrians which
+provides significant domain gap with TartanAir dataset. In
+addition to comparing with general VO methods, we also
+provide the comparison with frame-to-frame VO methods
+which are specifically trained and/or designed for outdoor
+driving scenarios [5], [25], [33], [38]–[40].
+In Table III, we provide comparison with other frame-to-
+frame VO methods using RMSE drift [35]. Compared to the
+general methods, DINO-VO achieves the lowest trel on 3 out
+of 4 sequences and the lowest rrel on 2 out of 4 sequences. On
+average, DINO-VO achieves the lowest trel with 54% error
+reduction compared to the second best results, DiffPoseNet.
+Our method achieves the second lowest average rrel with
+less than 1% increase compared to iSLAM-VO. Despite never
+having seen these scenarios, DINO-VO provides significant
+improvement against general frame-to-frame VO methods [7],
+[23], [24], [37] and even methods which are designed/trained
+for driving scenarios [5], [25], [33], [38]–[40], showcasing its
+generalization ability.
+In Table IV, we compare DINO-VO with other general
+multi-frame VO/SLAM methods in term of ATE on KITTI
+odometry sequence 0-10, specifically reported in [10]. DINO-
+VO has the lowest ATE in 5 out of 11 sequences and
+achieves the lowest average ATE despite not using multi-
+frames optimization and loop-closure. Note that on sequence
+00, 02, 05, and 07, the visual SLAM systems benefit from
+loop-closure resulting in better accuracy. On Sequence 01, 03,
+06, 08, 09, and 10 which contain significant appearances of
+dynamic objects, DINO-VO achieves the lowest ATE on 4
+out of 6 sequences despite having never seen the objects and
+using no explicit matches filtering, showcasing its robustness
+to dynamic objects.
+D. Runtime and Memory
+Fig. 5 shows the inference time and memory comparison
+of DINO-VO with other methods on EuRoC dataset using a
+single RTX4090 GPU and i9-12900k CPU. DINO-VO runs
+at 13.8 ms ( 72 FPS) and uses only 0.96GB GPU memory.
+All of the reported DINO-VO results are run using FP16
+half-precision inference with PyTorch software. DINO-VO
+TABLE VI
+ABLATION STUDY RESULT.
+Matching Performance
+On TartanAir
+Traj Eval.
+Det / Desc
+R
+MMA @1/3/5/10 px
+TartanAir
+ATE[m]↓
+EuRoC
+ATE[m]↓
+KITTI
+ATE[m]↓
+(1)
+SP / SP
+92.7
+36.8 / 70.4 / 78.3 / 83.3
+1.14
+0.616
+28.2
+SP / D
+89.1
+36.4 / 69.1 / 76.4 / 80.7
+1.03
+0.630
+56.1
+SP / F
+92.6
+36.7 / 71.0 / 78.6 / 83.3
+1.11
+0.634
+30.3
+SP / D+F
+92.2
+38.0 / 73.0 / 80.9 / 84.6
+0.68
+0.420
+20.1
+(2)
+SP / D+F
+92.2
+38.0 / 73.0 / 80.9 / 84.6
+0.68
+0.420
+20.1
+SP-A / D+F
+92.6
+36.9 / 71.3 / 80.1 / 83.3
+0.71
+0.460
+28.1
+SIFT / D+F
+83.4
+33.8 / 67.0 / 75.1 / 77.3
+1.14
+0.584
+25.9
+SIFT-A / D+F
+88.7
+31.8 / 65.6 / 78.6 / 83.7
+0.92
+0.565
+18.2
+SAL / D+F
+88.3
+33.9 / 71.6 / 82.2 / 83.6
+0.78
+0.528
+19.8
+SAL-A / D+F
+91.0
+33.1 / 68.5 / 82.8 / 87.0
+0.58
+0.404
+15.1
+- The best and second best results of each setting (1) and (2) are bold and
+underlined.
+- SP: SuperPoint (baseline); D: DINOv2; F: FinerCNN, D+F: Concatenated
+DINOv2 and FinerCNN (Proposed in Sec. III-B).
+- SP-A: SuperPoint Detector w/ grid alignment; SIFT-A: SIFT detector w/
+grid-alignment; SAL: Salient Detector w/o grid alignment; SAL-A: SAL w/
+grid aligment (Proposed in Sec. III-A).
+has up to 9× and 13.5× lower memory footprint and faster
+inference time, respectively. Compared to prior works, DINO-
+VO uses sparse feature matching instead of optical-flow [7]–
+[9], [23], [37]. Furthermore, DINO-VO benefits from highly
+efficient parallelization of attention mechanism in its feature
+descriptor [13] and feature matching networks [19]. We further
+provide the timing breakdown of DINO-VO in Table V. The
+proposed keypoints detector and fine-grained CNN encoder
+have minimal overhead compared to the total inference time,
+using only 5% and 8% of the total runtime.
+V. ABLATION STUDIES
+To evaluate the effectiveness of our keypoint detectors and
+feature descriptors, we conduct ablation studies with different
+settings. In setting (1), we built on top of SuperPoint (SP) joint
+detector-descriptor networks [28] as the baseline and ablate
+the feature descriptors. In setting (2), we ablate the keypoints
+detectors on top of setting (1) SP/D+F. *-A denotes keypoints
+detector with grid-alignment proposed in Sec. III-A. We report
+the matching performance in term of recall at 5 pixel error
+threshold and mean matching accuracy (MMA) at various error
+thresholds [42] as well as the average ATE. The ablation study
+results are shown in Table VI. We further depict the qualitative
+comparisons in Fig. 6.
+A. Localizable Features Importance
+As shown in Table VI, using DINOv2 descriptors alone
+(D) results in matching performance drop compared to using
+SuperPoint descriptors, similar results are observed in [16].
+The combination of DINOv2 with FinerCNN (D+F) signifi-
+cantly improves the matching accuracies across all thresholds
+compared to SuperPoint descriptors. These results show the
+importance of having localizable features from FinerCNN. The
+FinerCNN alone has comparable matching performance to Su-
+perPoint while having a 2.4× faster inference speed. Beyond
+the matching performance, the proposed descriptors achieve
+40%, 32% and 29% average ATE reduction on TartanAir,
+EuRoC, and KITTI, compared to using SuperPoint features.
+
+
+--- PAGE 7 ---
+AZHARI et al.: DINO-VO: A FEATURE-BASED VISUAL ODOMETRY LEVERAGING A VISUAL FOUNDATION MODEL
+7
+(d) KITTI 06
+(e) KITTI 07
+(b) EuRoC MH04
+(c) EuRoC V203
+(a) TartanAir MH007
+raindrops, fogs, 
+and variable lighting
+low illumination
+motion blur and
+variable exposure/lighting
+unseen outdoor scene
+large unseen dynamic 
+object (cars)
+Trajectory
+Snapshot
+Rel Trans Err [m]
+Fig. 6. Qualitative results. top row: Trajectory comparisons of the proposed method (DINO-VO) along with two ablated systems, namely ours with SP / SP
+and ours with SP / D. middle row: frame-to-frame relative translation error comparison on the red square area of the trajectory. bottom row: snapshot of the
+image input along with its challenging conditions which disturb the VO systems. DINO-VO has the lowest error on various challenging conditions compared
+to with the system with SuperPoint detector-descriptor and DINOv2 only features, showcasing the robustness of our system.
+B. Robustness and Generalization of DINOv2 Features
+As provided in Table VI, the usage of DINOv2 without
+FinerCNN shows better accuracy on TartanAir MH sequences
+which contain significant disturbances [34] despite having less
+accurate matches. The semantic information provided by DI-
+NOv2 is observed to be beneficial to down-weight unfavorable
+matches for pose estimation. However, using DINOv2 features
+alone performs significantly worse when tested on out-of-
+domain sequences as shown in Table VI and Fig. 6. (d)-(e). We
+suspect that the matching networks learns to exploit specific
+bias of DINOv2 features in the TartanAir dataset hindering
+the generalization ability of DINOv2 features. Combining with
+FinnerCNN resolves this issue as the matching network can
+optimally combine the geometric and semantic information
+encoded in FinerCNN and DINOv2 features. This combina-
+tion further improve the robustness which are pronounce in
+sequences with various disturbances such as variable lighting,
+fogs, aggressive motion, motion blur and unseen dynamic
+object as shown Fig. 6. (a), (c), and (e).
+C. Keypoints Detector Effectiveness
+The proposed keypoints detector (SAL-A) used in DINO-
+VO significantly improves the matching and VO accuracy
+compared to using SuperPoint and SIFT detectors. With-
+out grid-alignment, salient detector (SAL) performs worse
+compared to SuperPoint detector, showing the importance of
+having aligned keypoints on DINOv2 coarse features. Intro-
+ducing grid-alignment to SIFT detector (SIFT-A) significantly
+improves its matching and VO performance. Conversely, Su-
+perPoint detector w/ alignment (SP-A) results in a slightly
+degraded performance. Furthermore, SAL-A offers more dis-
+tributed keypoints across the image which is beneficial for
+pose estimation. Additionally, it has 6× and 4× faster detector
+inference time compared to SIFT and SP.
+VI. DISCUSSION AND CONCLUSION
+In this paper we present DINO-VO, a novel feature-based
+visual odometry approach that leverages the robustness and
+generalization capabilities of the DINOv2 visual foundation
+model. We verify that DINO-VO is robust against various
+disturbances and generalizable when tested on out-of-domain
+datasets. DINO-VO achieves state-of-the-art accuracy against
+previous frame-to-frame VO methods on the TartanAir and
+KITTI datasets, while also demonstrating highly competitive
+performance on the EuRoC dataset. DINO-VO is designed
+to be lightweight and able to run at 72 FPS with less than
+1GB memory usage on a single GPU. In addition, we have
+addressed the problem of directly utilizing DINOv2 coarse
+features in sparse image matching as highlighted in [16].
+The main limitation of our approach is that it relies on
+frame-to-frame pose estimation such that it is more prone to
+drift compared to multi-frame VO methods. Nevertheless, our
+monocular method is closing the accuracy gap with multi-
+frame VO methods on TartanAir and EuRoC, and remains
+highly competitive even against top-performing stereo systems
+like MAC-VO when considering its significant advantages
+in efficiency and memory usage. Noticeably, our method
+outperforms multi-frames VO methods on KITTI dataset.
+Future work will investigate integrating DINO-VO on multi-
+frames VO schemes such as using bundle adjustment. These
+improvements could also benefits from metric depth estimation
+developed in [14] which also utilizes DINOv2 encoder.
+
+
+--- PAGE 8 ---
+8
+IEEE ROBOTICS AND AUTOMATION LETTERS. PREPRINT VERSION. ACCEPTED JULY, 2025
+REFERENCES
+[1] C. Campos, R. Elvira, J. J. G. Rodr´ıguez, J. M. Montiel, and J. D.
+Tard´os, “Orb-slam3: An accurate open-source library for visual, visual–
+inertial, and multimap slam,” IEEE Transactions on Robotics, vol. 37,
+no. 6, pp. 1874–1890, 2021.
+[2] J. Engel, V. Koltun, and D. Cremers, “Direct sparse odometry,” IEEE
+transactions on pattern analysis and machine intelligence, vol. 40, no. 3,
+pp. 611–625, 2017.
+[3] J. Tang, L. Ericson, J. Folkesson, and P. Jensfelt, “Gcnv2: Efficient
+correspondence prediction for real-time slam,” IEEE Robotics and
+Automation Letters, vol. 4, no. 4, pp. 3505–3512, 2019.
+[4] O. Ilter, I. Armeni, M. Pollefeys, and D. Barath, “Semantically guided
+feature matching for visual slam,” in 2024 IEEE International Con-
+ference on Robotics and Automation (ICRA), pp. 12013–12019, IEEE,
+2024.
+[5] S. Wang, R. Clark, H. Wen, and N. Trigoni, “Deepvo: Towards end-to-
+end visual odometry with deep recurrent convolutional neural networks,”
+in 2017 IEEE international conference on robotics and automation
+(ICRA), pp. 2043–2050, IEEE, 2017.
+[6] Z. Teed and J. Deng, “Deepv2d: Video to depth with differentiable
+structure from motion,” in 8th International Conference on Learning
+Representations, ICLR 2020, 2020.
+[7] W. Wang, Y. Hu, and S. Scherer, “Tartanvo: A generalizable learning-
+based vo,” in Conference on Robot Learning, pp. 1761–1772, PMLR,
+2021.
+[8] Z. Teed and J. Deng, “Droid-slam: Deep visual slam for monocular,
+stereo, and rgb-d cameras,” Advances in neural information processing
+systems, vol. 34, pp. 16558–16569, 2021.
+[9] Z. Teed, L. Lipson, and J. Deng, “Deep patch visual odometry,”
+Advances in Neural Information Processing Systems, vol. 36, 2024.
+[10] L. Lipson, Z. Teed, and J. Deng, “Deep Patch Visual SLAM,” in
+European Conference on Computer Vision, 2024.
+[11] M. Caron, H. Touvron, I. Misra, H. J´egou, J. Mairal, P. Bojanowski, and
+A. Joulin, “Emerging properties in self-supervised vision transformers,”
+in Proceedings of the International Conference on Computer Vision
+(ICCV), 2021.
+[12] M. Oquab, T. Darcet, T. Moutakanni, H. V. Vo, M. Szafraniec, V. Khali-
+dov, P. Fernandez, D. HAZIZA, F. Massa, A. El-Nouby, M. Assran,
+N. Ballas, W. Galuba, R. Howes, P.-Y. Huang, S.-W. Li, I. Misra,
+M. Rabbat, V. Sharma, G. Synnaeve, H. Xu, H. Jegou, J. Mairal,
+P. Labatut, A. Joulin, and P. Bojanowski, “DINOv2: Learning robust
+visual features without supervision,” Transactions on Machine Learning
+Research, 2024.
+[13] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai,
+T. Unterthiner, M. Dehghani, M. Minderer, G. Heigold, S. Gelly,
+J. Uszkoreit, and N. Houlsby, “An image is worth 16x16 words: Trans-
+formers for image recognition at scale,” in International Conference on
+Learning Representations, 2021.
+[14] L. Yang, B. Kang, Z. Huang, X. Xu, J. Feng, and H. Zhao, “Depth
+anything: Unleashing the power of large-scale unlabeled data,” in
+Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, pp. 10371–10381, 2024.
+[15] J. Edstedt, Q. Sun, G. B¨okman, M. Wadenb¨ack, and M. Felsberg, “Roma:
+Robust dense feature matching,” in Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition, pp. 19790–
+19800, 2024.
+[16] H. Jiang, A. Karpur, B. Cao, Q. Huang, and A. Araujo, “Omniglue:
+Generalizable feature matching with foundation model guidance,” in
+Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, pp. 19865–19875, 2024.
+[17] N. Tumanyan, A. Singer, S. Bagon, and T. Dekel, “Dino-tracker: Taming
+dino for self-supervised point tracking in a single video,” 2024.
+[18] N. Keetha, A. Mishra, J. Karhade, K. M. Jatavallabhula, S. Scherer,
+M. Krishna, and S. Garg, “Anyloc: Towards universal visual place
+recognition,” IEEE Robotics and Automation Letters, 2023.
+[19] P. Lindenberger, P.-E. Sarlin, and M. Pollefeys, “Lightglue: Local feature
+matching at light speed,” in Proceedings of the IEEE/CVF International
+Conference on Computer Vision, pp. 17627–17638, 2023.
+[20] Y. Wang, X. He, S. Peng, D. Tan, and X. Zhou, “Efficient loftr: Semi-
+dense local feature matching with sparse-like speed,” arXiv preprint
+arXiv:2403.04765, 2024.
+[21] B. Roessle and M. Nießner, “End2end multi-view feature matching
+with differentiable pose optimization,” in Proceedings of the IEEE/CVF
+International Conference on Computer Vision, pp. 477–487, 2023.
+[22] N. Yang, L. v. Stumberg, R. Wang, and D. Cremers, “D3vo: Deep
+depth, deep pose and deep uncertainty for monocular visual odometry,”
+in Proceedings of the IEEE/CVF conference on computer vision and
+pattern recognition, pp. 1281–1292, 2020.
+[23] T. Fu, S. Su, Y. Lu, and C. Wang, “islam: Imperative slam,” IEEE
+Robotics and Automation Letters, 2024.
+[24] C. M. Parameshwara, G. Hari, C. Ferm¨uller, N. J. Sanket, and Y. Aloi-
+monos, “Diffposenet: Direct differentiable camera pose estimation,” in
+Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, pp. 6845–6854, 2022.
+[25] L. Lai, Z. Shangguan, J. Zhang, and E. Ohn-Bar, “Xvo: Generalized
+visual odometry via cross-modal self-training,” in Proceedings of the
+IEEE/CVF International Conference on Computer Vision, pp. 10094–
+10105, 2023.
+[26] Z. Teed and J. Deng, “Raft: Recurrent all-pairs field transforms for opti-
+cal flow,” in Computer Vision–ECCV 2020: 16th European Conference,
+Glasgow, UK, August 23–28, 2020, Proceedings, Part II 16, pp. 402–
+419, Springer, 2020.
+[27] S. Wang, W. Li, Y. Wang, Z. Fan, Z. Huang, X. Cai, J. Zhao, and
+D. Li, “Mambavo: Deep visual odometry based on sequential matching
+refinement and training smoothing,” in Proceedings of the Computer
+Vision and Pattern Recognition Conference (CVPR), pp. 1252–1262,
+June 2025.
+[28] D. DeTone, T. Malisiewicz, and A. Rabinovich, “Superpoint: Self-
+supervised interest point detection and description,” in Proceedings
+of the IEEE conference on computer vision and pattern recognition
+workshops, pp. 224–236, 2018.
+[29] G. Potje, F. Cadar, A. Araujo, R. Martins, and E. R. Nascimento, “Xfeat:
+Accelerated features for lightweight image matching,” in IEEE/CVF
+Conference on Computer Vision and Pattern Recognition (CVPR), 2024.
+[30] P.-E. Sarlin, D. DeTone, T. Malisiewicz, and A. Rabinovich, “Superglue:
+Learning feature matching with graph neural networks,” in Proceedings
+of the IEEE/CVF conference on computer vision and pattern recognition,
+pp. 4938–4947, 2020.
+[31] J. Su, M. Ahmed, Y. Lu, S. Pan, W. Bo, and Y. Liu, “Roformer: En-
+hanced transformer with rotary position embedding,” Neurocomputing,
+vol. 568, p. 127063, 2024.
+[32] R. Hartley and A. Zisserman, Multiple view geometry in computer vision.
+Cambridge university press, 2003.
+[33] H. Zhan, C. S. Weerasekera, J.-W. Bian, and I. Reid, “Visual odometry
+revisited: What should be learnt?,” in 2020 IEEE International Confer-
+ence on Robotics and Automation (ICRA), pp. 4203–4210, 2020.
+[34] W. Wang, D. Zhu, X. Wang, Y. Hu, Y. Qiu, C. Wang, Y. Hu, A. Kapoor,
+and S. Scherer, “Tartanair: A dataset to push the limits of visual slam,”
+in 2020 IEEE/RSJ International Conference on Intelligent Robots and
+Systems (IROS), pp. 4909–4916, IEEE, 2020.
+[35] A. Geiger, P. Lenz, C. Stiller, and R. Urtasun, “Vision meets robotics:
+The kitti dataset,” The International Journal of Robotics Research,
+vol. 32, no. 11, pp. 1231–1237, 2013.
+[36] C. Forster, Z. Zhang, M. Gassner, M. Werlberger, and D. Scaramuzza,
+“Svo: Semidirect visual odometry for monocular and multicamera sys-
+tems,” IEEE Transactions on Robotics, vol. 33, no. 2, pp. 249–265,
+2016.
+[37] Y. Qiu, Y. Chen, Z. Zhang, W. Wang, and S. Scherer, “Mac-vo: Metrics-
+aware covariance for learning-based stereo visual odometry,” in 2025
+IEEE International Conference on Robotics and Automation (ICRA),
+pp. 3803–3814, 2025.
+[38] Z. Liu, E. Malis, and P. Martinet, “A new dense hybrid stereo visual
+odometry approach,” in 2022 IEEE/RSJ International Conference on
+Intelligent Robots and Systems (IROS), pp. 6998–7003, 2022.
+[39] A. Bangunharcana, A. Magd, and K.-S. Kim, “Dualrefine: Self-
+supervised depth and pose estimation through iterative epipolar sampling
+and refinement toward equilibrium,” in Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition (CVPR),
+pp. 726–738, June 2023.
+[40] Z. Liu, E. Malis, and P. Martinet, “Adaptive learning for hybrid visual
+odometry,” IEEE Robotics and Automation Letters, vol. 9, no. 8,
+pp. 7341–7348, 2024.
+[41] X. Gao, R. Wang, N. Demmel, and D. Cremers, “Ldso: Direct sparse
+odometry with loop closure,” in 2018 IEEE/RSJ International Confer-
+ence on Intelligent Robots and Systems (IROS), pp. 2198–2204, IEEE,
+2018.
+[42] Z. Zhan, D. Gao, Y.-J. Lin, Y. Xia, and C. Wang, “imatching: Imperative
+correspondence learning,” in European Conference on Computer Vision,
+pp. 183–200, Springer, 2024.
+
+
