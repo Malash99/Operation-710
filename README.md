@@ -150,7 +150,8 @@ Relative Pose (R, t)
 | Feature Matching | Transformer with rotary encoding | `src/models/feature_matching.py` |
 | Pose Estimation | Weighted 8-point + SVD | `src/models/pose_estimation.py` |
 | Loss Functions | Matching + Pose losses | `src/losses/losses.py` |
-| Dataset Loader | EuRoC image + pose loader | `src/datasets/euroc.py` |
+| Dataset Loader | EuRoC image + pose + stereo depth | `src/datasets/euroc.py` |
+| Stereo Depth | StereoSGBM + GT correspondence gen | `src/utils/stereo.py` |
 
 ---
 
@@ -231,8 +232,17 @@ L_pose: Rotation + Translation loss (Eq. 13)
 - [x] Verified: all gradients flow, perfect-match loss ~0, scheduling caps at 0.9
 - See: [`src/losses/README_phase7_loss_functions.md`](src/losses/README_phase7_loss_functions.md)
 
+### ✅ Stereo Depth + GT Correspondences (COMPLETE)
+- [x] Stereo calibration loader for cam0+cam1 (`src/utils/stereo.py`)
+- [x] Stereo rectification maps via `cv2.stereoRectify` (baseline = 0.1101m)
+- [x] Dense disparity via `cv2.StereoSGBM` → depth in meters
+- [x] GT correspondence generation: back-project kp1 to 3D → transform by GT pose → project into image 2 → nearest-neighbor match
+- [x] Dataset loader extended with `depth1` tensor (476×742) per sample
+- [x] Verified: 70% valid depth coverage, 0.5–85m range, 94% match rate with 14px grid
+- [x] Loading speed: 0.05s per sample (suitable for training dataloader)
+
 ### 📋 Phase 8–9: Upcoming
-- Phase 8: Training Pipeline
+- Phase 8: Training Pipeline (training loop, keyframe selection, LR scheduling)
 - Phase 9: Evaluation (ATE on EuRoC MH_01_easy)
 
 For detailed implementation order, see [CLAUDE.md](CLAUDE.md).

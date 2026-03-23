@@ -3,6 +3,8 @@ EuRoC MAV Dataset loader for DINO-VO.
 
 Loads consecutive image pairs from the EuRoC Machine Hall sequences
 with corresponding relative camera poses computed from ground truth.
+Optionally computes stereo depth maps from cam0+cam1 for GT correspondence
+generation (needed by the matching loss, Eq. 12).
 
 Reference: https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets
 """
@@ -18,6 +20,12 @@ from scipy.spatial.transform import Rotation
 from torch.utils.data import Dataset
 
 from src.datasets.transforms import get_rescaled_intrinsics, preprocess_image
+from src.utils.stereo import (
+    load_stereo_calibration,
+    compute_stereo_rectification,
+    create_stereo_matcher,
+    compute_depth_map,
+)
 
 
 class EuRoCDataset(Dataset):
@@ -40,11 +48,13 @@ class EuRoCDataset(Dataset):
         skip_frames: int = 2,
         target_h: int = 476,
         target_w: int = 742,
+        compute_stereo_depth: bool = True,
     ):
         self.sequence_path = sequence_path
         self.skip_frames = skip_frames
         self.target_h = target_h
         self.target_w = target_w
+        self.compute_stereo_depth = compute_stereo_depth
 
         mav0_path = os.path.join(sequence_path, "mav0")
 
@@ -53,10 +63,29 @@ class EuRoCDataset(Dataset):
         self.K, self.dist_coeffs, self.T_BS = self._parse_sensor_yaml(cam0_sensor_path)
         self.orig_h, self.orig_w = 480, 752  # EuRoC cam0 resolution
 
-        # 2. Parse image list
+        # 2. Parse image lists (cam0 + cam1)
         cam0_csv_path = os.path.join(mav0_path, "cam0", "data.csv")
         self.image_dir = os.path.join(mav0_path, "cam0", "data")
         self.image_list = self._parse_image_list(cam0_csv_path)
+
+        # cam1 for stereo depth
+        self.image_dir_cam1 = os.path.join(mav0_path, "cam1", "data")
+        cam1_csv_path = os.path.join(mav0_path, "cam1", "data.csv")
+        self.image_list_cam1 = self._parse_image_list(cam1_csv_path)
+        # Build timestamp -> filename lookup for cam1
+        self._cam1_lookup = {ts: fname for ts, fname in self.image_list_cam1}
+
+        # 2b. Setup stereo depth computation
+        if self.compute_stereo_depth:
+            cam1_sensor_path = os.path.join(mav0_path, "cam1", "sensor.yaml")
+            self.stereo_calib = load_stereo_calibration(
+                cam0_sensor_path, cam1_sensor_path
+            )
+            self.stereo_rect = compute_stereo_rectification(
+                self.stereo_calib,
+                image_size=(self.orig_w, self.orig_h),
+            )
+            self.stereo_matcher = create_stereo_matcher()
 
         # 3. Parse ground truth poses
         gt_csv_path = os.path.join(
@@ -98,9 +127,9 @@ class EuRoCDataset(Dataset):
         frame_i, frame_j = self.pairs[idx]
         gt_i, gt_j = self.pair_gt_indices[idx]
 
-        # Load images
-        _, fname_i = self.image_list[frame_i]
-        _, fname_j = self.image_list[frame_j]
+        # Load cam0 images
+        ts_i, fname_i = self.image_list[frame_i]
+        ts_j, fname_j = self.image_list[frame_j]
         img1 = cv2.imread(
             os.path.join(self.image_dir, fname_i), cv2.IMREAD_GRAYSCALE
         )
@@ -130,14 +159,60 @@ class EuRoCDataset(Dataset):
         pose_wb2 = self.gt_poses[gt_j]  # T_WB at time 2
         relative_pose = self._compute_relative_pose(pose_wb1, pose_wb2)
 
-        return {
+        result = {
             "image1": tensor1,                                      # (3, 476, 742)
             "image2": tensor2,                                      # (3, 476, 742)
             "relative_pose": torch.from_numpy(relative_pose).float(),  # (4, 4)
             "intrinsics": torch.from_numpy(self.K_scaled).float(),     # (3, 3)
-            "timestamp1": self.image_list[frame_i][0],
-            "timestamp2": self.image_list[frame_j][0],
+            "timestamp1": ts_i,
+            "timestamp2": ts_j,
         }
+
+        # Compute stereo depth map for image 1 (original resolution)
+        if self.compute_stereo_depth:
+            depth1 = self._compute_stereo_depth_for_frame(ts_i, img1)
+            # Resize depth map to target resolution (nearest neighbor to avoid interpolation artifacts)
+            depth1_resized = cv2.resize(
+                depth1,
+                (self.target_w, self.target_h),
+                interpolation=cv2.INTER_NEAREST,
+            )
+            result["depth1"] = torch.from_numpy(depth1_resized).float()  # (476, 742)
+
+        return result
+
+    def _compute_stereo_depth_for_frame(
+        self, timestamp_ns: int, img0_gray: np.ndarray
+    ) -> np.ndarray:
+        """Compute stereo depth for a single frame using cam0+cam1.
+
+        Args:
+            timestamp_ns: Timestamp of the frame to find matching cam1 image.
+            img0_gray: cam0 grayscale image (original resolution), shape (H, W).
+
+        Returns:
+            depth: (H, W) float32 depth map in meters. Invalid pixels are 0.0.
+        """
+        # Find matching cam1 image by timestamp
+        cam1_fname = self._cam1_lookup.get(timestamp_ns)
+        if cam1_fname is None:
+            # No exact match; return empty depth
+            return np.zeros((self.orig_h, self.orig_w), dtype=np.float32)
+
+        img1_gray = cv2.imread(
+            os.path.join(self.image_dir_cam1, cam1_fname), cv2.IMREAD_GRAYSCALE
+        )
+        if img1_gray is None:
+            return np.zeros((self.orig_h, self.orig_w), dtype=np.float32)
+
+        depth = compute_depth_map(
+            img0_gray,
+            img1_gray,
+            self.stereo_rect,
+            self.stereo_matcher,
+            self.stereo_calib["baseline"],
+        )
+        return depth
 
     # ------------------------------------------------------------------ #
     #  Parsing helpers                                                     #
