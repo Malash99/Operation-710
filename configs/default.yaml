@@ -1,0 +1,29 @@
+data:
+  sequence_path: data/euroc/MH_01_easy
+  skip_frames: 2
+  target_h: 476
+  target_w: 742
+  compute_stereo_depth: true
+
+training:
+  epochs: 14
+  batch_size: 1          # paper uses small batches; stereo SGBM is per-sample
+  num_workers: 0         # stereo matcher is not fork-safe on Windows
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  lambda_p_start_epoch: 5   # epochs 1-4: matching only; epoch 5+: combined
+  lambda_p_increment: 1.5e-4
+  lambda_p_max: 0.9
+  grad_clip: 1.0
+
+model:
+  top_k: 512
+  descriptor_dim: 192
+  matching_layers: 12
+  reproj_threshold: 5.0  # px — max reprojection error for GT correspondence
+
+logging:
+  log_interval: 50       # log every N steps
+  checkpoint_interval: 1 # save checkpoint every N epochs
+  checkpoint_dir: checkpoints
+  output_dir: outputs
