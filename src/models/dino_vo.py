@@ -187,8 +187,15 @@ class DinoVO(nn.Module):
         matches = match_out["matches"]   # list[tensor(M_b, 2)]
         weights = match_out["weights"]   # list[tensor(M_b,)]
 
+        # Sanitize weights before SVD — NaN/Inf from unstable softmax causes
+        # degenerate Essential matrix and NaN gradients in the backward pass.
+        weights_clean = [
+            torch.nan_to_num(w, nan=0.0, posinf=0.0, neginf=0.0)
+            for w in weights
+        ]
+
         kp1_matched, kp2_matched, w_matched = _pad_matches(
-            kp1, kp2, matches, weights
+            kp1, kp2, matches, weights_clean
         )
         pose_out = self.pose_est(kp1_matched, kp2_matched, w_matched, intrinsics)
 

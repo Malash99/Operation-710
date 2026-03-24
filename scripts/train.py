@@ -5,9 +5,15 @@ Training schedule (paper Section IV-A):
   Epochs 1-4:  lambda_p = 0.0  (matching loss only)
   Epochs 5-14: lambda_p ramps 0.0 -> 0.9 (increment 1.5e-4 per step)
 
+Fixes for NaN stability:
+  - Pose loss is clamped to pose_loss_clamp (default 50.0) before combining
+  - LR is reduced to learning_rate_pose_phase (1e-5) when pose loss starts
+  - NaN guard: if loss is NaN, skip backward and log a warning
+
 Usage:
     python -m scripts.train
     python -m scripts.train --config configs/default.yaml
+    python -m scripts.train --resume checkpoints/epoch_04.pth   # resume from checkpoint
     python -m scripts.train --config configs/default.yaml --max_steps 10  # quick test
 """
 
@@ -113,11 +119,12 @@ def build_gt_matches_batch(
 #  Training loop                                                       #
 # ------------------------------------------------------------------ #
 
-def train(cfg: dict, max_steps: int = None):
+def train(cfg: dict, resume: str = None, max_steps: int = None):
     """Main training loop.
 
     Args:
         cfg: Parsed configuration dictionary (from default.yaml).
+        resume: Path to a checkpoint .pth file to resume from.
         max_steps: If set, stop after this many steps (for quick testing).
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -180,18 +187,40 @@ def train(cfg: dict, max_steps: int = None):
     ckpt_interval = cfg["logging"]["checkpoint_interval"]
     lambda_p_start = cfg["training"]["lambda_p_start_epoch"]
     reproj_thr = cfg["model"]["reproj_threshold"]
+    pose_loss_clamp = cfg["training"].get("pose_loss_clamp", 50.0)
+    lr_pose_phase = cfg["training"].get("learning_rate_pose_phase", 1e-5)
 
     history = {"step": [], "total": [], "matching": [], "pose": [], "lambda_p": []}
     global_step = 0
+    run_steps = 0   # steps taken in this run (for max_steps stopping)
+    start_epoch = 1
+    nan_count = 0
 
-    print(f"\nStarting training for {epochs} epochs...")
+    # --- Resume from checkpoint ---
+    if resume:
+        print(f"\nResuming from checkpoint: {resume}")
+        ckpt = torch.load(resume, map_location=device)
+        model.load_state_dict(ckpt["model_state_dict"])
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        loss_fn.set_lambda_p(ckpt.get("lambda_p", 0.0))
+        start_epoch = ckpt["epoch"] + 1
+        global_step = ckpt["global_step"]
+        print(f"  Resumed from epoch {ckpt['epoch']}, step {global_step}, lp={ckpt.get('lambda_p', 0.0):.4f}")
 
-    for epoch in range(1, epochs + 1):
+    print(f"\nStarting training from epoch {start_epoch} to {epochs}...")
+
+    for epoch in range(start_epoch, epochs + 1):
         model.train()
 
         # Set lambda_p schedule (paper Section IV-A)
         if epoch < lambda_p_start:
             loss_fn.set_lambda_p(0.0)
+
+        # Reduce LR when pose loss phase begins
+        if epoch == lambda_p_start:
+            for pg in optimizer.param_groups:
+                pg["lr"] = lr_pose_phase
+            print(f"\n  [Epoch {epoch}] Switching to pose phase — LR reduced to {lr_pose_phase}")
 
         epoch_losses = {"total": [], "matching": [], "pose": []}
         epoch_start = time.time()
@@ -200,6 +229,7 @@ def train(cfg: dict, max_steps: int = None):
 
         for batch in pbar:
             global_step += 1
+            run_steps += 1
 
             # Move to device
             image1 = batch["image1"].to(device)          # (B, 3, H, W)
@@ -222,11 +252,16 @@ def train(cfg: dict, max_steps: int = None):
                 reproj_threshold=reproj_thr,
             )
 
+            # Skip step if no GT matches in this batch (no matching supervision signal)
+            if gt_mask.sum() == 0:
+                optimizer.zero_grad()
+                continue
+
             # --- GT R, t ---
             R_gt = T_gt[:, :3, :3]   # (B, 3, 3)
             t_gt = T_gt[:, :3, 3]    # (B, 3)
 
-            # --- Loss ---
+            # --- Loss (with pose loss clamping for stability) ---
             loss_dict = loss_fn(
                 out["all_assignments"],
                 out["all_sigma1"],
@@ -239,8 +274,46 @@ def train(cfg: dict, max_steps: int = None):
                 t_gt,
             )
 
+            # Clamp pose loss contribution before combining to prevent gradient explosion.
+            # The raw pose loss (300-700) is too large initially — clamp it so the
+            # gradient magnitude stays manageable while the pose head warms up.
+            lp = loss_fn.lambda_p.item()
+            if lp > 0 and not torch.isnan(loss_dict["pose"]):
+                pose_clamped = torch.clamp(loss_dict["pose"], max=pose_loss_clamp)
+                total_loss = (1.0 - lp) * loss_dict["matching"] + lp * pose_clamped
+            else:
+                total_loss = loss_dict["total"]
+
+            # --- NaN guard: skip step if loss exploded ---
+            if torch.isnan(total_loss) or torch.isinf(total_loss):
+                nan_count += 1
+                optimizer.zero_grad()
+                if nan_count % 10 == 1:
+                    print(f"\n  [WARNING] NaN/Inf loss at step {global_step} (total so far: {nan_count}). Skipping.")
+                # Increment lambda_p anyway so schedule stays on track
+                if epoch >= lambda_p_start:
+                    loss_fn.step_lambda_p()
+                continue
+
             # --- Backward ---
-            loss_dict["total"].backward()
+            total_loss.backward()
+
+            # Check for NaN in gradients BEFORE optimizer step.
+            # SVD in pose estimation can produce NaN gradients even when the
+            # loss value is finite. These corrupt weights silently if not caught.
+            has_nan_grad = any(
+                p.grad is not None and (torch.isnan(p.grad).any() or torch.isinf(p.grad).any())
+                for p in model.parameters() if p.requires_grad
+            )
+            if has_nan_grad:
+                nan_count += 1
+                optimizer.zero_grad()
+                if nan_count % 10 == 1:
+                    print(f"\n  [WARNING] NaN gradient at step {global_step} (total: {nan_count}). Skipping optimizer step.")
+                if epoch >= lambda_p_start:
+                    loss_fn.step_lambda_p()
+                continue
+
             torch.nn.utils.clip_grad_norm_(
                 model.parameters(), cfg["training"]["grad_clip"]
             )
@@ -251,10 +324,10 @@ def train(cfg: dict, max_steps: int = None):
                 loss_fn.step_lambda_p()
 
             # --- Logging ---
-            total_l = loss_dict["total"].item()
+            total_l = total_loss.item()
             match_l = loss_dict["matching"].item()
             pose_l  = loss_dict["pose"].item()
-            lp      = loss_dict["lambda_p"]
+            lp      = loss_fn.lambda_p.item()
 
             epoch_losses["total"].append(total_l)
             epoch_losses["matching"].append(match_l)
@@ -263,8 +336,9 @@ def train(cfg: dict, max_steps: int = None):
             pbar.set_postfix({
                 "loss": f"{total_l:.4f}",
                 "match": f"{match_l:.4f}",
-                "pose": f"{pose_l:.4f}",
-                "λp": f"{lp:.4f}",
+                "pose": f"{min(pose_l, pose_loss_clamp):.2f}",
+                "lp": f"{lp:.4f}",
+                "nan": nan_count,
             })
 
             if global_step % log_interval == 0:
@@ -272,8 +346,8 @@ def train(cfg: dict, max_steps: int = None):
                 print(
                     f"  Step {global_step} | "
                     f"total={total_l:.4f} match={match_l:.4f} "
-                    f"pose={pose_l:.4f} λp={lp:.4f} | "
-                    f"gt_matches={n_gt}"
+                    f"pose_raw={pose_l:.2f} lp={lp:.4f} | "
+                    f"gt_matches={n_gt} nan_skipped={nan_count}"
                 )
 
             history["step"].append(global_step)
@@ -282,7 +356,7 @@ def train(cfg: dict, max_steps: int = None):
             history["pose"].append(pose_l)
             history["lambda_p"].append(lp)
 
-            if max_steps and global_step >= max_steps:
+            if max_steps and run_steps >= max_steps:
                 print(f"\nReached max_steps={max_steps}, stopping.")
                 _save_checkpoint(model, optimizer, loss_fn, epoch, global_step, cfg)
                 _save_loss_curve(history, cfg["logging"]["output_dir"])
@@ -297,7 +371,8 @@ def train(cfg: dict, max_steps: int = None):
         print(
             f"\nEpoch {epoch:02d} complete in {elapsed:.0f}s | "
             f"avg_total={avg_total:.4f} avg_match={avg_match:.4f} "
-            f"avg_pose={avg_pose:.4f} λp={loss_fn.lambda_p.item():.4f}"
+            f"avg_pose={avg_pose:.4f} lp={loss_fn.lambda_p.item():.4f} "
+            f"nan_skipped={nan_count}"
         )
 
         # Save checkpoint
@@ -342,7 +417,7 @@ def _save_loss_curve(history: dict, output_dir: str):
 
     axes[1].plot(steps, history["lambda_p"], color="orange", linewidth=1)
     axes[1].set_xlabel("Step")
-    axes[1].set_ylabel("λp")
+    axes[1].set_ylabel("lp")
     axes[1].set_title("Lambda_p Schedule")
     axes[1].grid(True, alpha=0.3)
 
@@ -363,6 +438,10 @@ def main():
         "--config", default="configs/default.yaml", help="Path to config YAML"
     )
     parser.add_argument(
+        "--resume", default=None,
+        help="Path to checkpoint .pth file to resume from (e.g. checkpoints/epoch_04.pth)"
+    )
+    parser.add_argument(
         "--max_steps", type=int, default=None,
         help="Stop after N steps (for quick testing)"
     )
@@ -371,7 +450,7 @@ def main():
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
 
-    train(cfg, max_steps=args.max_steps)
+    train(cfg, resume=args.resume, max_steps=args.max_steps)
 
 
 if __name__ == "__main__":

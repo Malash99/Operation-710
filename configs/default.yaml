@@ -10,11 +10,13 @@ training:
   batch_size: 1          # paper uses small batches; stereo SGBM is per-sample
   num_workers: 0         # stereo matcher is not fork-safe on Windows
   learning_rate: 1.0e-4
+  learning_rate_pose_phase: 1.0e-5  # reduced LR when pose loss starts (epoch 5+)
   weight_decay: 1.0e-5
   lambda_p_start_epoch: 5   # epochs 1-4: matching only; epoch 5+: combined
   lambda_p_increment: 1.5e-4
   lambda_p_max: 0.9
   grad_clip: 1.0
+  pose_loss_clamp: 50.0   # clamp raw pose loss before combining to prevent NaN
 
 model:
   top_k: 512
