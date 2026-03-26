@@ -15,7 +15,113 @@ This is a from-scratch reimplementation of DINO-VO, a monocular visual odometry 
 - **Transformer-based matching** (inspired by LightGlue) for feature correspondence
 - **Differentiable pose estimation** via weighted 8-point algorithm
 
-The system is trained end-to-end on the **EuRoC MAV dataset** and evaluated on real robot trajectories.
+The paper trains on **TartanAir** (synthetic dataset with GT depth) and evaluates on **EuRoC MAV**. Our current implementation trains on **EuRoC** using stereo-derived depth for GT correspondences.
+
+---
+
+## Current Status: Training Run 2 Complete (2026-03-26)
+
+### What Works
+- **Matching loss converges**: 8.9 -> 3.0 over 14 epochs (significant improvement)
+- **Keyframe selection**: Filters degenerate small-motion pairs (504/3637 filtered)
+- **Bug fixes**: 5 critical/medium bugs found and fixed via paper audit (see below)
+- **All pipeline components** verified individually
+
+### What Doesn't Work Yet
+- **Pose loss does not converge**: pose_raw stays ~370-440 (random pose territory, max ~1365)
+- **NaN gradients from SVD backward**: 1953/5488 steps (36%) produce NaN gradients
+- **NaN rate increases with lambda_p**: As pose loss weight grows, more steps are NaN. Epoch 14 was ~100% NaN
+
+### Root Cause
+The **SVD backward pass** in pose estimation is numerically unstable when matches are imperfect. The gradient through `torch.linalg.svd` contains terms like `1/(sigma_i - sigma_j)` that explode when singular values are close. This is a known PyTorch issue, not an implementation bug. The paper likely avoids this by training on TartanAir (larger motions, better-conditioned Essential matrices).
+
+### Next Steps
+1. **Evaluate trajectory** using matching-only checkpoint (epoch 4-5) — the matching quality may be sufficient for good inference-time pose estimation even without pose loss training
+2. **Obtain TartanAir dataset** for proper training (as the paper does)
+3. **Build evaluation pipeline** (Phase 9): trajectory accumulation, Umeyama alignment, ATE metric
+
+---
+
+## Bugs Found and Fixed (Paper Audit, 2026-03-25)
+
+A full audit comparing every equation and hyperparameter against the paper revealed 5 bugs:
+
+### Bug 1 (CRITICAL): RoPE Coordinate Normalization Swapped
+- **File**: `src/models/feature_matching.py` lines 522-527
+- **Problem**: x-coordinate (column) was divided by `img_h`, y-coordinate (row) was divided by `img_w` — swapped
+- **Impact**: Corrupted ALL spatial positional encoding in self-attention. The transformer couldn't reason about spatial relationships correctly
+- **Fix**: `kp[..., 0] / (img_w - 1)` and `kp[..., 1] / (img_h - 1)`
+
+### Bug 2 (CRITICAL): Epipolar Constraint Matrix Column Order
+- **File**: `src/models/pose_estimation.py` lines 108-118
+- **Problem**: Phi columns were in column-major order `[e11, e21, e31, e12, ...]` but `view(-1, 3, 3)` assumes row-major. This produced **E-transpose** instead of E
+- **Impact**: Estimated the INVERSE relative pose (cam2-to-cam1 instead of cam1-to-cam2)
+- **Fix**: Reordered to row-major `[e11, e12, e13, e21, e22, e23, e31, e32, e33]`
+
+### Bug 3 (CRITICAL): Cheirality Check Depth Sign
+- **File**: `src/models/pose_estimation.py`
+- **Problem**: Missing negative sign in triangulated depth computation
+- **Impact**: Selected the wrong (R, t) candidate from the 4 Essential matrix decompositions — specifically, picked the opposite translation direction
+- **Why it was hidden**: Bugs #2 and #3 **cancelled each other out**. The transposed E gave the inverse pose, and the wrong depth sign flipped the cheirality check, so the final result was approximately correct. Fixing Bug #2 alone exposed Bug #3
+- **Fix**: `num = -(t_cross_x2 * Rx1_cross_x2).sum(dim=-1)`
+- **Verification**: After both fixes, clean correspondences give 0.0000 deg rotation error and 0.000005 translation error
+
+### Bug 4 (MEDIUM): L2 Normalization Not in Paper
+- **File**: `src/models/feature_descriptor.py` line 217
+- **Problem**: Applied `nn.functional.normalize(descriptors, dim=-1)` after Linear projection. Paper Eq. 1 does NOT include L2 normalization
+- **Impact**: Constrained all descriptors to unit sphere, reducing expressiveness before matching transformer
+- **Fix**: Removed L2 normalization
+
+### Bug 5 (MEDIUM): Score Matrix Scaling Not in Paper
+- **File**: `src/models/feature_matching.py` line 380
+- **Problem**: Applied `S / sqrt(192)` scaling to score matrix. Paper Eq. 6 is a raw dot product without scaling
+- **Impact**: Changed the sharpness of the dual-softmax assignment probabilities
+- **Fix**: Removed scaling factor
+
+---
+
+## Training History
+
+### Training Run 1 (Pre-Audit, 2026-03-24)
+- **Config**: batch_size=1, skip_frames=2, pose_loss_clamp=50
+- **Result**: Matching loss 0.76 -> 0.64 (slow improvement). Pose loss = 50.0 constant (clamped). 2874/5488 steps NaN (52%)
+- **Problems**:
+  - Pose loss clamp at 50 blocked ALL gradient (pose_raw was always 600-1072 >> 50)
+  - Per-parameter NaN gradient check was O(6M) — dominated step time (6.25s/step)
+  - No keyframe selection — pairs with ~1cm motion made Essential matrix degenerate
+  - All 5 bugs above were present
+
+### Training Run 2 (Post-Audit, 2026-03-25)
+- **Config**: batch_size=8, skip_frames=2 + keyframe selection (min_translation=0.03m), no pose clamp
+- **Fixes applied**: All 5 bugs fixed, pose clamp removed, fast NaN check, keyframe selection
+- **Result**: Matching loss 8.9 -> 3.0 (huge improvement). Pose loss ~370 (not converging). 1953/5488 NaN (36%)
+- **Key insight**: Matching loss starts higher (8.9 vs 0.76) because removing L2 normalization and score scaling changed the loss landscape — but it converges much further (3.0 vs 0.64)
+- **Speed**: 7.3s/step with batch=8 vs 6.25s/step with batch=1. But 8x more samples per step, so ~8x more efficient
+
+---
+
+## Key Design Decisions and Lessons
+
+### 1. Paper trains on TartanAir, NOT EuRoC
+The paper only evaluates on EuRoC. Training on EuRoC was our adaptation because we didn't have TartanAir. EuRoC has very small inter-frame motions (~1-5cm) which makes the Essential matrix poorly conditioned for SVD-based training.
+
+### 2. GT Correspondences Require Depth
+The matching loss (Eq. 12) is supervised — it needs "keypoint i in image 1 matches keypoint j in image 2." Generating these requires:
+1. Back-project keypoint from image 1 to 3D using **depth**
+2. Transform by GT pose
+3. Project into image 2
+4. Find nearest detected keypoint within threshold
+
+The paper uses TartanAir's GT depth. We compute depth from EuRoC's stereo cameras using StereoSGBM.
+
+### 3. SVD Backward is Fundamentally Unstable
+`torch.linalg.svd` backward pass contains `1/(sigma_i - sigma_j)` terms that produce NaN when singular values are close. This is not fixable without replacing the SVD with a custom backward implementation. The paper likely doesn't encounter this because TartanAir has larger, more diverse motions.
+
+### 4. Cancelling Bugs Can Hide Problems
+Bugs #2 and #3 (transposed E + wrong depth sign) cancelled each other out, passing unit tests. This is why integration tests with known poses are essential — they would have caught the individual errors.
+
+### 5. Keyframe Selection is Critical
+Without keyframe selection, ~14% of EuRoC pairs have translation < 3cm, making the Essential matrix degenerate. The paper specifies this in Section III-F (24px mean pixel displacement threshold).
 
 ---
 
@@ -23,8 +129,8 @@ The system is trained end-to-end on the **EuRoC MAV dataset** and evaluated on r
 
 ### Hardware
 - **GPU**: NVIDIA RTX 5060 Ti (16GB VRAM) or equivalent
-  - Minimum: GPU with 8GB VRAM + CUDA compute capability ≥ 5.0
   - RTX 50 series requires PyTorch nightly with CUDA 12.8 support
+  - Training uses ~12GB VRAM with batch_size=8
 - **RAM**: 16GB+ recommended
 - **Storage**: ~15GB for EuRoC dataset + models
 
@@ -66,29 +172,17 @@ python scripts/verify_gpu.py
 
 ### 5. Download EuRoC Dataset
 
-Download the **Machine Hall** sequences from [ETH Research Collection](https://www.research-collection.ethz.ch/handle/20.500.11850/690084):
+Download from [ETH Research Collection](https://www.research-collection.ethz.ch/handle/20.500.11850/690084):
 
 ```bash
-# After downloading machine_hall.zip, extract to data/euroc/
-# Manual extraction:
 unzip machine_hall.zip -d data/euroc/
 cd data/euroc/MH_01_easy
 unzip MH_01_easy.zip
 ```
 
-Verify dataset:
+Verify:
 ```bash
 python scripts/verify_dataset.py
-```
-
-Expected structure:
-```
-data/euroc/MH_01_easy/
-└── mav0/
-    ├── cam0/data/*.png          # 3,682 left camera images
-    ├── cam1/data/*.png          # 3,682 right camera images (for stereo)
-    ├── imu0/data.csv            # IMU measurements (for VIO)
-    └── state_groundtruth_estimate0/data.csv  # Ground truth poses
 ```
 
 ---
@@ -97,17 +191,35 @@ data/euroc/MH_01_easy/
 
 ### Training
 ```bash
-python scripts/train.py --config configs/default.yaml
+python -m scripts.train --config configs/default.yaml
 ```
 
-### Evaluation
+Resume from checkpoint:
 ```bash
-python scripts/evaluate.py --checkpoint checkpoints/best_model.pth --sequence MH_01_easy
+python -m scripts.train --config configs/default.yaml --resume checkpoints/epoch_04.pth
 ```
 
-### Visualization
+Quick test (N steps only):
 ```bash
-python scripts/visualize.py --trajectory outputs/MH_01_easy_trajectory.txt
+python -m scripts.train --config configs/default.yaml --max_steps 10
+```
+
+### Config (`configs/default.yaml`)
+```yaml
+data:
+  sequence_path: data/euroc/MH_01_easy
+  skip_frames: 2
+  min_translation: 0.03    # keyframe selection threshold (meters)
+  max_skip_multiplier: 5
+
+training:
+  epochs: 14
+  batch_size: 8            # 12GB VRAM peak
+  learning_rate: 1.0e-4
+  lambda_p_start_epoch: 5  # matching-only for epochs 1-4
+  lambda_p_increment: 1.5e-4
+  lambda_p_max: 0.9
+  grad_clip: 1.0
 ```
 
 ---
@@ -117,27 +229,27 @@ python scripts/visualize.py --trajectory outputs/MH_01_easy_trajectory.txt
 ### Pipeline Overview
 ```
 Image Pair (It, It+1)
-    ↓
+    |
 [1] Salient Keypoint Detector (Sec III-A)
     - Gaussian smoothing + Sobel gradients
-    - Grid-based MaxPooling (14×14)
+    - Grid-based MaxPooling (14x14)
     - Non-Maximum Suppression + Top-k (512 keypoints)
-    ↓
+    |
 [2] Feature Descriptor (Sec III-B)
     - DINOv2-ViT-S: 384-dim features (frozen)
     - FinerCNN: 64-dim features (trainable)
     - Fusion: 192-dim final descriptors
-    ↓
+    |
 [3] Feature Matching (Sec III-C)
     - Transformer (L=12 layers, 3 heads)
     - Soft assignment matrix with dual-softmax
     - Confidence prediction MLP
-    ↓
+    |
 [4] Pose Estimation (Sec III-D)
     - Weighted 8-point algorithm
     - Essential matrix decomposition
     - Cheirality check
-    ↓
+    |
 Relative Pose (R, t)
 ```
 
@@ -150,132 +262,49 @@ Relative Pose (R, t)
 | Feature Matching | Transformer with rotary encoding | `src/models/feature_matching.py` |
 | Pose Estimation | Weighted 8-point + SVD | `src/models/pose_estimation.py` |
 | Loss Functions | Matching + Pose losses | `src/losses/losses.py` |
+| Unified Model | End-to-end pipeline wrapper | `src/models/dino_vo.py` |
 | Dataset Loader | EuRoC image + pose + stereo depth | `src/datasets/euroc.py` |
 | Stereo Depth | StereoSGBM + GT correspondence gen | `src/utils/stereo.py` |
 
+### Trainable Parameters
+| Module | Parameters |
+|--------|-----------|
+| DINOv2-ViT-S/14 (frozen) | 22,056,576 |
+| FinerCNN + Fusion | ~151,000 |
+| Feature Matching Transformer | ~6,044,000 |
+| **Total trainable** | **6,195,522** |
+
 ---
 
-## Training Details
+## Loss Function
 
-### Loss Function
 ```
-L_total = (1 - λ_p) * L_matching + λ_p * L_pose
-
-L_matching: Supervised correspondence loss (Eq. 12)
-L_pose: Rotation + Translation loss (Eq. 13)
+L_total = (1 - lambda_p) * L_matching + lambda_p * L_pose
 ```
 
-### Training Schedule
-- **Epochs 1-4**: λ_p = 0.0 (matching loss only)
-- **Epochs 5-14**: λ_p increases 0.0 → 0.9 (gradual pose loss introduction)
-- **Learning rate**: Adam with scheduling
-- **Image resolution**: 476×742 (resized from 752×480)
+**Matching loss** (Eq. 12): NLL of soft assignment matrix at GT correspondence locations, with deep supervision over all 12 transformer layers. Includes unmatchable keypoint penalties.
+
+**Pose loss** (Eq. 13): `180 * ||log(R_est) - log(R_gt)|| + 400 * ||t_est_unit - t_gt_unit||`
+- Theoretical max: ~1365 (180*pi + 400*2)
+
+**Schedule**: lambda_p = 0 for epochs 1-4, then increments by 1.5e-4 per step (caps at 0.9).
 
 ---
 
-## Current Progress
+## Implementation Phases
 
-### ✅ Phase 1: Environment Setup (COMPLETE)
-- [x] Project structure created
-- [x] PyTorch nightly installed with RTX 5060 Ti support (CUDA 12.8, sm_120)
-- [x] GPU verified and working (15.93 GB VRAM)
-- [x] EuRoC MH_01_easy dataset downloaded and verified (3,682 frames)
-
-### ✅ Phase 2: Data Pipeline (COMPLETE)
-- [x] EuRoC dataset loader (`src/datasets/euroc.py`)
-- [x] Image preprocessing and transforms (`src/datasets/transforms.py`)
-- [x] Undistortion, resize 752×480 → 742×476, ImageNet normalization
-- [x] Ground truth pose loading with coordinate frame correction
-- [x] Verified: 3,637 image pairs, intrinsics rescaled correctly
-
-### ✅ Phase 3: Keypoint Detector (COMPLETE)
-- [x] Gaussian smoothing (kernel=5, sigma=2.0)
-- [x] Sobel gradient magnitude computation
-- [x] Grid-based MaxPooling (kernel=14, stride=14 — matches DINOv2 patch size)
-- [x] Non-Maximum Suppression (radius=8)
-- [x] Gradient thresholding (0.01) + Top-k selection (512 keypoints)
-- [x] Verified: 512 keypoints per image, spatially distributed
-- See: [`src/models/README_phase3_keypoint_detector.md`](src/models/README_phase3_keypoint_detector.md)
-
-### ✅ Phase 4: Feature Descriptor (COMPLETE)
-- [x] DINOv2-ViT-S/14 loaded from torch.hub, fully frozen (22M params)
-- [x] FinerCNN encoder implemented (XFeat-style, 4 blocks, 64-dim output)
-- [x] Feature fusion: concat(384-dim, 64-dim) → Linear → 192-dim
-- [x] L2 normalization on final descriptors
-- [x] Verified: shape `(B, 512, 192)`, norm error < 1.2e-07, 151K trainable params
-- See: [`src/models/README_phase4_feature_descriptor.md`](src/models/README_phase4_feature_descriptor.md)
-
-### ✅ Phase 5: Feature Matching (COMPLETE)
-- [x] Transformer-based matching (L=12 layers, 3 heads, head_dim=64)
-- [x] Self-attention with 2D Rotary Positional Encoding (encodes keypoint x,y)
-- [x] Cross-attention between image pairs (no positional encoding)
-- [x] Dual-softmax soft assignment matrix (Eq. 5-8)
-- [x] Confidence prediction MLP (Eq. 9)
-- [x] Mutual nearest-neighbor match extraction
-- [x] Verified: 6.3M trainable params, 110ms forward, 169 MB GPU, gradients flow
-- See: [`src/models/README_phase5_feature_matching.md`](src/models/README_phase5_feature_matching.md)
-
-### ✅ Phase 6: Pose Estimation (COMPLETE)
-- [x] Weighted 8-point algorithm with differentiable SVD (Eq. 10-11)
-- [x] Essential matrix projection (enforce rank-2, equal singular values)
-- [x] Decomposition into 4 (R, t) candidates
-- [x] Cheirality check via triangulated depth (selects correct pose)
-- [x] Verified: 0 params (geometric layer), det(R)=1.000001, epipolar err=7.6e-08
-- [x] Clean correspondences: rotation error 0.0000 deg, translation error 0.0198 deg
-- See: [`src/models/README_phase6_pose_estimation.md`](src/models/README_phase6_pose_estimation.md)
-
-### ✅ Phase 7: Loss Functions (COMPLETE)
-- [x] Matching loss: NLL of assignment matrix at GT correspondences (Eq. 12)
-- [x] Pose loss: lambda_r=180 * rotation error + lambda_t=400 * translation error (Eq. 13)
-- [x] Combined loss with lambda_p scheduling: 0.0 -> 0.9 (Eq. 14)
-- [x] Differentiable SO(3) log map (Rodrigues formula) for rotation error
-- [x] Verified: all gradients flow, perfect-match loss ~0, scheduling caps at 0.9
-- See: [`src/losses/README_phase7_loss_functions.md`](src/losses/README_phase7_loss_functions.md)
-
-### ✅ Stereo Depth + GT Correspondences (COMPLETE)
-- [x] Stereo calibration loader for cam0+cam1 (`src/utils/stereo.py`)
-- [x] Stereo rectification maps via `cv2.stereoRectify` (baseline = 0.1101m)
-- [x] Dense disparity via `cv2.StereoSGBM` → depth in meters
-- [x] GT correspondence generation: back-project kp1 to 3D → transform by GT pose → project into image 2 → nearest-neighbor match
-- [x] Dataset loader extended with `depth1` tensor (476×742) per sample
-- [x] Verified: 70% valid depth coverage, 0.5–85m range, 94% match rate with 14px grid
-- [x] Loading speed: 0.05s per sample (suitable for training dataloader)
-
-### 📋 Phase 8–9: Upcoming
-- Phase 8: Training Pipeline (training loop, keyframe selection, LR scheduling)
-- Phase 9: Evaluation (ATE on EuRoC MH_01_easy)
-
-For detailed implementation order, see [CLAUDE.md](CLAUDE.md).
-
----
-
-## Results (Target)
-
-Based on the paper, expected performance on EuRoC MH_01_easy:
-
-| Metric | Target Value |
-|--------|--------------|
-| ATE (Absolute Trajectory Error) | ~0.05-0.10 m |
-| Processing Speed | 15-20 FPS |
-| Scale Drift | < 2% |
-
----
-
-## Extensions
-
-### Stereo Visual Odometry
-Use both cam0 (left) and cam1 (right) for:
-- Absolute scale recovery (no scale ambiguity)
-- Improved depth estimation
-- More robust tracking
-
-### Visual-Inertial Odometry (VIO)
-Fuse IMU measurements with visual odometry:
-- High-frequency motion estimation (200 Hz)
-- Scale recovery via IMU integration
-- Robust to motion blur and fast motion
-
-See implementation details in [CLAUDE.md](CLAUDE.md) Section: "Sensor Fusion Extensions"
+| Phase | Status | Description |
+|-------|--------|-------------|
+| 1. Environment Setup | COMPLETE | PyTorch nightly + CUDA 12.8 + EuRoC dataset |
+| 2. Data Pipeline | COMPLETE | EuRoC loader with transforms, GT poses, stereo depth |
+| 3. Keypoint Detector | COMPLETE | Gaussian + Sobel + MaxPool + NMS + Top-k |
+| 4. Feature Descriptor | COMPLETE | DINOv2 + FinerCNN fusion to 192-dim |
+| 5. Feature Matching | COMPLETE | 12-layer transformer with RoPE + dual-softmax |
+| 6. Pose Estimation | COMPLETE | Weighted 8-point + Essential matrix + cheirality |
+| 7. Loss Functions | COMPLETE | Matching (Eq. 12) + Pose (Eq. 13) + Combined (Eq. 14) |
+| 8. Training Pipeline | COMPLETE | Training loop + keyframe selection + checkpointing |
+| 9. Evaluation | TODO | Trajectory accumulation + Umeyama alignment + ATE |
+| 10. TartanAir Training | TODO | Train on proper dataset as the paper does |
 
 ---
 
@@ -287,35 +316,42 @@ See implementation details in [CLAUDE.md](CLAUDE.md) Section: "Sensor Fusion Ext
 ├── README.md              # This file
 ├── requirements.txt       # Python dependencies
 │
-├── configs/               # Configuration files
-│   └── default.yaml
+├── configs/
+│   └── default.yaml       # Training hyperparameters
 │
 ├── data/                  # Dataset directory (not committed)
 │   └── euroc/
 │       └── MH_01_easy/
 │
-├── src/                   # Source code
-│   ├── models/            # VO pipeline components
-│   ├── datasets/          # Data loaders
-│   ├── utils/             # Helper functions
-│   └── losses/            # Loss functions
+├── src/
+│   ├── models/
+│   │   ├── dino_vo.py           # Unified model wrapper
+│   │   ├── keypoint_detector.py # Salient Keypoint Detector (Sec III-A)
+│   │   ├── feature_descriptor.py# DINOv2 + FinerCNN (Sec III-B)
+│   │   ├── finer_cnn.py         # Lightweight CNN encoder
+│   │   ├── feature_matching.py  # Transformer matching (Sec III-C)
+│   │   └── pose_estimation.py   # Weighted 8-point (Sec III-D)
+│   ├── datasets/
+│   │   ├── euroc.py             # EuRoC dataset loader
+│   │   └── transforms.py        # Image preprocessing
+│   ├── utils/
+│   │   └── stereo.py            # Stereo depth + GT correspondences
+│   └── losses/
+│       └── losses.py            # Matching + Pose losses (Eq. 12-14)
 │
-├── scripts/               # Executable scripts
-│   ├── train.py
-│   ├── evaluate.py
-│   ├── visualize.py
-│   └── download_euroc.py
+├── scripts/
+│   ├── train.py                 # Training script
+│   ├── verify_gpu.py            # GPU verification
+│   ├── verify_dataset.py        # Dataset verification
+│   └── test_stereo_depth.py     # Stereo depth verification
 │
-├── checkpoints/           # Saved models
-├── outputs/               # Results and visualizations
-└── tests/                 # Unit tests
+├── checkpoints/           # Saved models (epoch_01.pth ... epoch_14.pth)
+└── outputs/               # Loss curves, visualizations
 ```
 
 ---
 
 ## Citation
-
-If you use this implementation, please cite the original paper:
 
 ```bibtex
 @article{azhari2025dinovo,
@@ -342,9 +378,3 @@ This implementation is for educational and research purposes. Please refer to th
 - **DINOv2**: Meta AI Research ([facebookresearch/dinov2](https://github.com/facebookresearch/dinov2))
 - **EuRoC Dataset**: ETH Zurich ASL ([EuRoC MAV Dataset](https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets))
 - **Inspiration**: LightGlue, XFeat, ORB-SLAM3
-
----
-
-## Contact
-
-For questions or issues, please open an issue on GitHub.

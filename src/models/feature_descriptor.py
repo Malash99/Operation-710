@@ -213,7 +213,4 @@ class FeatureDescriptor(nn.Module):
         # Step 5: Linear projection → (B, K, 192)  [Equation 1]
         descriptors = self.proj(f_cat)
 
-        # L2-normalize so matching operates on unit-sphere descriptors
-        descriptors = nn.functional.normalize(descriptors, dim=-1)
-
         return descriptors  # (B, K, 192)
