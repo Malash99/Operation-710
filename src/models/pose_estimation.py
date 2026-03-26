@@ -98,8 +98,9 @@ class PoseEstimation(nn.Module):
             Phi: (B, M, 9) — constraint matrix.
         """
         # x1 = [x1, y1, 1], x2 = [x2, y2, 1]
-        # phi_i = [x1*x2, x1*y2, x1, y1*x2, y1*y2, y1, x2, y2, 1]
-        # This is the Kronecker product x1 (x) x2, flattened
+        # Epipolar constraint: x2^T E x1 = 0
+        # Expanding with flat(E) in ROW-MAJOR order [e11,e12,e13,e21,e22,e23,e31,e32,e33]:
+        #   phi = [x1*x2, y1*x2, x2, x1*y2, y1*y2, y2, x1, y1, 1]
         x1_x = x1[..., 0]  # (B, M)
         x1_y = x1[..., 1]
         x2_x = x2[..., 0]
@@ -107,13 +108,13 @@ class PoseEstimation(nn.Module):
 
         Phi = torch.stack([
             x1_x * x2_x,   # e11 coefficient
-            x1_y * x2_x,   # e21 coefficient
-            x2_x,           # e31 coefficient
-            x1_x * x2_y,   # e12 coefficient
+            x1_y * x2_x,   # e12 coefficient
+            x2_x,           # e13 coefficient
+            x1_x * x2_y,   # e21 coefficient
             x1_y * x2_y,   # e22 coefficient
-            x2_y,           # e32 coefficient
-            x1_x,           # e13 coefficient
-            x1_y,           # e23 coefficient
+            x2_y,           # e23 coefficient
+            x1_x,           # e31 coefficient
+            x1_y,           # e32 coefficient
             torch.ones_like(x1_x),  # e33 coefficient
         ], dim=-1)  # (B, M, 9)
 
@@ -307,8 +308,10 @@ class PoseEstimation(nn.Module):
                 t.unsqueeze(1).expand_as(x2), x2, dim=-1
             )  # (B, M, 3)
 
-            # Depth in camera 1
-            num = (t_cross_x2 * Rx1_cross_x2).sum(dim=-1)      # (B, M)
+            # Depth in camera 1:
+            # d1 = -[(x2 x t) . (x2 x Rx1)] / |x2 x Rx1|^2
+            #     = -[(t x x2) . (Rx1 x x2)] / |Rx1 x x2|^2
+            num = -(t_cross_x2 * Rx1_cross_x2).sum(dim=-1)     # (B, M)
             denom = (Rx1_cross_x2 * Rx1_cross_x2).sum(dim=-1)  # (B, M)
             depth1 = num / (denom + 1e-8)                        # (B, M)
 

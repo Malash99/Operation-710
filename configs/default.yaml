@@ -1,0 +1,31 @@
+data:
+  sequence_path: data/euroc/MH_01_easy
+  skip_frames: 2
+  target_h: 476
+  target_w: 742
+  compute_stereo_depth: true
+  min_translation: 0.03    # meters — skip pairs with less motion (keyframe selection, Section III-F)
+  max_skip_multiplier: 5   # max frames to skip = skip_frames * this
+
+training:
+  epochs: 14
+  batch_size: 8            # 12GB VRAM peak, 1.25s/sample (was batch=1 at 3.5s/sample)
+  num_workers: 0           # 0 is safest on Windows; data loading (0.4s) << GPU forward (7s)
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  lambda_p_start_epoch: 5  # epochs 1-4: matching only; epoch 5+: combined
+  lambda_p_increment: 1.5e-4
+  lambda_p_max: 0.9
+  grad_clip: 1.0
+
+model:
+  top_k: 512
+  descriptor_dim: 192
+  matching_layers: 12
+  reproj_threshold: 5.0    # px — max reprojection error for GT correspondence
+
+logging:
+  log_interval: 50         # log every N steps
+  checkpoint_interval: 1   # save checkpoint every N epochs
+  checkpoint_dir: checkpoints
+  output_dir: outputs

@@ -35,7 +35,7 @@ Output:
     weights:     list of (M_b,)  tensors -- confidence weight per match
 """
 
-import math
+
 from typing import Dict, List, Optional, Tuple
 
 import torch
@@ -377,7 +377,6 @@ class FeatureMatching(nn.Module):
         f1_proj = self.score_proj(feat1)  # (B, K, D)
         f2_proj = self.score_proj(feat2)  # (B, K, D)
         S = torch.bmm(f1_proj, f2_proj.transpose(1, 2))  # (B, K, K)
-        S = S / math.sqrt(self.descriptor_dim)
 
         # Eq. 7-8: per-keypoint matchability
         sigma1 = torch.sigmoid(self.matchability(feat1))  # (B, K, 1)
@@ -519,12 +518,12 @@ class FeatureMatching(nn.Module):
         # Normalize keypoint coordinates to [0, 1] as per paper (Eq. 4, line 419)
         # Paper: p_i := (x_i, y_i) in [0, 1]^2
         kp1_norm = kp1.clone()
-        kp1_norm[..., 0] = kp1[..., 0] / (img_h - 1)  # x -> [0, 1]
-        kp1_norm[..., 1] = kp1[..., 1] / (img_w - 1)  # y -> [0, 1]
+        kp1_norm[..., 0] = kp1[..., 0] / (img_w - 1)  # x (column) -> [0, 1]
+        kp1_norm[..., 1] = kp1[..., 1] / (img_h - 1)  # y (row)    -> [0, 1]
 
         kp2_norm = kp2.clone()
-        kp2_norm[..., 0] = kp2[..., 0] / (img_h - 1)
-        kp2_norm[..., 1] = kp2[..., 1] / (img_w - 1)
+        kp2_norm[..., 0] = kp2[..., 0] / (img_w - 1)
+        kp2_norm[..., 1] = kp2[..., 1] / (img_h - 1)
 
         # Precompute 2D rotary positional encoding with normalized coords
         rope1 = _compute_rope_2d(kp1_norm, self.head_dim)

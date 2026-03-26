@@ -49,12 +49,16 @@ class EuRoCDataset(Dataset):
         target_h: int = 476,
         target_w: int = 742,
         compute_stereo_depth: bool = True,
+        min_translation: float = 0.0,
+        max_skip_multiplier: int = 5,
     ):
         self.sequence_path = sequence_path
         self.skip_frames = skip_frames
         self.target_h = target_h
         self.target_w = target_w
         self.compute_stereo_depth = compute_stereo_depth
+        self.min_translation = min_translation
+        self.max_skip_multiplier = max_skip_multiplier
 
         mav0_path = os.path.join(sequence_path, "mav0")
 
@@ -85,7 +89,9 @@ class EuRoCDataset(Dataset):
                 self.stereo_calib,
                 image_size=(self.orig_w, self.orig_h),
             )
-            self.stereo_matcher = create_stereo_matcher()
+            # Stereo matcher created lazily in _get_stereo_matcher() because
+            # cv2.StereoSGBM is not picklable (breaks num_workers > 0).
+            self._stereo_matcher = None
 
         # 3. Parse ground truth poses
         gt_csv_path = os.path.join(
@@ -102,18 +108,44 @@ class EuRoCDataset(Dataset):
         # 5. Build valid frame indices (those with nearby GT)
         valid_frame_indices = np.where(valid_mask)[0]
 
-        # 6. Build pairs: (frame_i, frame_j) where j = i + skip_frames
+        # 6. Build pairs with keyframe selection (Section III-F).
+        #    Skip pairs where GT translation is below min_translation to avoid
+        #    degenerate Essential matrix estimation from tiny baselines.
         self.pairs = []
         self.pair_gt_indices = []
         valid_set = set(valid_frame_indices.tolist())
+        skipped_small_motion = 0
 
         for idx in valid_frame_indices:
-            j = idx + skip_frames
-            if j in valid_set:
+            # Try increasing skip multiples until sufficient motion is found
+            found = False
+            for mult in range(1, self.max_skip_multiplier + 1):
+                j = idx + skip_frames * mult
+                if j not in valid_set:
+                    continue
+
+                if self.min_translation > 0:
+                    # Check GT translation magnitude
+                    T_rel = self._compute_relative_pose(
+                        self.gt_poses[gt_indices[idx]],
+                        self.gt_poses[gt_indices[j]],
+                    )
+                    t_mag = np.linalg.norm(T_rel[:3, 3])
+                    if t_mag < self.min_translation:
+                        continue
+
                 self.pairs.append((int(idx), int(j)))
                 self.pair_gt_indices.append(
                     (int(gt_indices[idx]), int(gt_indices[j]))
                 )
+                found = True
+                break
+
+            if not found and self.min_translation > 0:
+                skipped_small_motion += 1
+
+        if skipped_small_motion > 0:
+            print(f"  Keyframe selection: skipped {skipped_small_motion} frames with insufficient motion")
 
         # 7. Precompute rescaled intrinsics
         self.K_scaled = get_rescaled_intrinsics(
@@ -181,6 +213,12 @@ class EuRoCDataset(Dataset):
 
         return result
 
+    def _get_stereo_matcher(self):
+        """Lazy-create stereo matcher (cv2.StereoSGBM is not picklable)."""
+        if self._stereo_matcher is None:
+            self._stereo_matcher = create_stereo_matcher()
+        return self._stereo_matcher
+
     def _compute_stereo_depth_for_frame(
         self, timestamp_ns: int, img0_gray: np.ndarray
     ) -> np.ndarray:
@@ -209,7 +247,7 @@ class EuRoCDataset(Dataset):
             img0_gray,
             img1_gray,
             self.stereo_rect,
-            self.stereo_matcher,
+            self._get_stereo_matcher(),
             self.stereo_calib["baseline"],
         )
         return depth
