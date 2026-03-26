@@ -35,10 +35,23 @@ The paper trains on **TartanAir** (synthetic dataset with GT depth) and evaluate
 ### Root Cause
 The **SVD backward pass** in pose estimation is numerically unstable when matches are imperfect. The gradient through `torch.linalg.svd` contains terms like `1/(sigma_i - sigma_j)` that explode when singular values are close. This is a known PyTorch issue, not an implementation bug. The paper likely avoids this by training on TartanAir (larger motions, better-conditioned Essential matrices).
 
+### Evaluation Results (v0.1, epoch 4 checkpoint, 50 pairs)
+| Metric | Value |
+|--------|-------|
+| ATE RMSE | 0.4121 m |
+| ATE Mean | 0.3744 m |
+| Rotation Mean | 9.18 deg |
+| Scale factor | 0.0491 |
+| Avg matches/pair | 249 |
+
+Trajectory shape does not follow GT — expected, since pose loss never converged and we trained on EuRoC (not TartanAir).
+
 ### Next Steps
-1. **Evaluate trajectory** using matching-only checkpoint (epoch 4-5) — the matching quality may be sufficient for good inference-time pose estimation even without pose loss training
-2. **Obtain TartanAir dataset** for proper training (as the paper does)
-3. **Build evaluation pipeline** (Phase 9): trajectory accumulation, Umeyama alignment, ATE metric
+1. **Download TartanAir dataset** for proper training (as the paper does) — this is the #1 priority
+2. **Build TartanAir dataloader** — adapt pipeline for TartanAir's format (RGB images, GT depth, GT poses)
+3. **Retrain on TartanAir** — expect pose loss to converge (larger motions, better-conditioned E matrices)
+4. **Re-evaluate on EuRoC** — compare with paper's reported ATE results
+5. **Multi-sequence evaluation** — test on MH_02, MH_03, etc.
 
 ---
 
@@ -303,8 +316,10 @@ L_total = (1 - lambda_p) * L_matching + lambda_p * L_pose
 | 6. Pose Estimation | COMPLETE | Weighted 8-point + Essential matrix + cheirality |
 | 7. Loss Functions | COMPLETE | Matching (Eq. 12) + Pose (Eq. 13) + Combined (Eq. 14) |
 | 8. Training Pipeline | COMPLETE | Training loop + keyframe selection + checkpointing |
-| 9. Evaluation | TODO | Trajectory accumulation + Umeyama alignment + ATE |
-| 10. TartanAir Training | TODO | Train on proper dataset as the paper does |
+| 9. Evaluation | COMPLETE | Trajectory accumulation + global scale + ATE metric |
+| 10. TartanAir Data | **NEXT** | Download TartanAir + build dataloader |
+| 11. TartanAir Training | TODO | Train on proper dataset as the paper does |
+| 12. Final Evaluation | TODO | Re-evaluate on EuRoC, compare with paper |
 
 ---
 

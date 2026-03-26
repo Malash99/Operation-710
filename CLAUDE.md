@@ -495,19 +495,80 @@ L_t = (1 - λ_p) * L_m + λ_p * L_p
 
 ---
 
-### 🚧 Phase 3: Keypoint Detector (NEXT)
+### ✅ Phases 3-9: All Pipeline Components (COMPLETED)
 
-**Next Steps** (Paper Section III-A):
-1. Implement Gaussian filter + Sobel gradient computation
-2. Implement grid-based MaxPooling (kernel=14, stride=14)
-3. Implement Non-Maximum Suppression (NMS) with radius=8
-4. Implement gradient thresholding + top-k selection (512 keypoints)
-5. Test: Visualize detected keypoints on sample image
+**Date Range**: February–March 2026
+
+All core pipeline phases are complete:
+- **Phase 3**: Keypoint Detector — Gaussian + Sobel + MaxPool + NMS + Top-k (512)
+- **Phase 4**: Feature Descriptor — DINOv2-ViT-S/14 (frozen) + FinerCNN + Linear → 192-d
+- **Phase 5**: Feature Matching — 12-layer transformer with RoPE + dual-softmax
+- **Phase 6**: Pose Estimation — Weighted 8-point + Essential matrix + cheirality check
+- **Phase 7**: Loss Functions — Matching (Eq. 12) + Pose (Eq. 13) + Combined (Eq. 14)
+- **Phase 8**: Training Pipeline — Training loop + keyframe selection + checkpointing
+- **Phase 9**: Evaluation — Trajectory accumulation + global scale + ATE metric
+
+#### Paper Audit (2026-03-25): 5 bugs found and fixed
+1. **CRITICAL**: RoPE coordinate normalization swapped (x÷h, y÷w → x÷w, y÷h)
+2. **CRITICAL**: Epipolar Phi matrix in column-major → fixed to row-major
+3. **CRITICAL**: Cheirality check missing negative sign (hidden by bug #2)
+4. **MEDIUM**: L2 normalization on descriptors removed (not in paper)
+5. **MEDIUM**: Score matrix √d scaling removed (not in paper)
+
+#### Training Run 2 Results (EuRoC MH_01, 14 epochs)
+- Matching loss: 8.9 → 3.0 (converges)
+- Pose loss: ~370 (does NOT converge — SVD backward NaN, 36% of steps)
+- Root cause: Small EuRoC motions + SVD backward instability
+
+#### Evaluation Results (v0.1, epoch 4, 50 pairs)
+- ATE RMSE: 0.41 m, Rotation: 9.2 deg mean
+- Trajectory shape does not follow GT (expected without pose loss convergence)
+
+#### Tagged Version
+- **`v0.1-euroc-baseline`** — all code + 14 checkpoints saved
+- See `VERSIONS.md` for details
+
+---
+
+### 🚧 Phase 10: TartanAir Dataset + Training (NEXT)
+
+**Why TartanAir**: The paper trains ONLY on TartanAir (Section IV-A). EuRoC is evaluation-only.
+TartanAir has GT depth maps (perfect, not stereo-estimated), larger camera motions, and
+diverse environments — all of which should fix the SVD NaN issue and allow pose loss to converge.
+
+**Next Steps** (in order):
+
+#### Step 1: Download TartanAir
+- TartanAir v1: https://theairlab.org/tartanair-dataset/
+- Need: RGB images (left camera), depth maps, camera poses
+- Start with a few environments (e.g., `abandonedfactory`, `hospital`)
+- Paper doesn't specify which environments — likely uses many for diversity
+- Total dataset is ~1TB; download selectively
+
+#### Step 2: Build TartanAir Dataloader
+- Create `src/datasets/tartanair.py`
+- TartanAir format: RGB PNG images, depth as .npy, poses as text file
+- Pose format: [tx ty tz qx qy qz qw] per line (NED frame)
+- Depth: float32 .npy files, values in meters
+- Image resolution: 640×480 → resize to match paper's training resolution
+- GT correspondences: use TartanAir's perfect depth (no stereo estimation needed)
+
+#### Step 3: Retrain on TartanAir
+- Same hyperparameters as paper (Section IV-A)
+- Expect: pose loss should converge, NaN rate should drop significantly
+- Save checkpoints to `checkpoints_v02_tartanair/`
+
+#### Step 4: Evaluate on EuRoC
+- Run evaluation on MH_01 through MH_05
+- Compare ATE with paper's Table I results
+- Tag as `v0.2-tartanair`
 
 ---
 
 ## Start Command
 
-**For resuming from Phase 3**:
+**For resuming at Phase 10**:
 
-"Phase 2 is complete. Let's proceed with Phase 3: Keypoint Detector (Section III-A). First, I'll implement the Gaussian filter and Sobel gradient computation."
+"Phases 1-9 are complete (tagged v0.1-euroc-baseline). The model trains but pose loss
+doesn't converge on EuRoC due to small motions and SVD instability. Next: download
+TartanAir dataset and build a dataloader for it, then retrain as the paper does."
