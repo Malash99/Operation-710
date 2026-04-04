@@ -1,0 +1,51 @@
+# DINO-VO v0.4 — TartanAir Training with RANSAC Pre-filtering
+#
+# Phase 12 fix: Break the chicken-and-egg problem.
+# Diagnostic tests (2026-04-04) showed:
+#   - 8-point algorithm is correct but fails with outlier matches
+#   - Confidence weights (ConfMLP) can't learn without pose loss
+#   - Pose loss can't converge without good confidence weights
+#
+# Solution: Use OpenCV RANSAC to filter outlier matches before the
+# weighted 8-point algorithm during training. This gives the model
+# clean pose supervision, allowing ConfMLP to learn meaningful weights.
+#
+# Changes from v0.3:
+#   - ransac_filter: true (new feature)
+#   - ransac_threshold: 3.0 px (RANSAC inlier threshold)
+#   - checkpoint_dir: checkpoints_v04_tartanair
+#   - output_dir: outputs_v04_tartanair
+
+data:
+  dataset: tartanair
+  data_root: data/tartanair
+  skip_frames: 1
+  target_h: 476
+  target_w: 742
+  max_pairs: 8500
+
+training:
+  epochs: 14
+  batch_size: 6
+  num_workers: 2
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  lambda_p_start_epoch: 5
+  lambda_p_increment: 1.5e-4
+  lambda_p_max: 0.9
+  grad_clip: 1.0
+  use_amp: false
+  ransac_filter: true          # NEW: filter outlier matches with OpenCV RANSAC
+  ransac_threshold: 3.0        # NEW: RANSAC inlier threshold in pixels
+
+model:
+  top_k: 512
+  descriptor_dim: 192
+  matching_layers: 12
+  reproj_threshold: 5.0
+
+logging:
+  log_interval: 50
+  checkpoint_interval: 1
+  checkpoint_dir: checkpoints_v04_tartanair
+  output_dir: outputs_v04_tartanair

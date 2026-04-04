@@ -705,30 +705,49 @@ confidence weights can't filter.
 
 ### 🚧 Phase 12: Break the Chicken-and-Egg Problem (NEXT)
 
-**Recommended approaches** (in priority order):
+#### Solution Implemented: RANSAC Pre-filtering (v0.4)
 
-1. **RANSAC pre-filtering during training** — Use OpenCV RANSAC to filter
-   outlier matches before the weighted 8-point. This breaks the circular
-   dependency: good poses -> meaningful pose loss -> ConfMLP learns weights.
-   Later, remove RANSAC and let learned weights take over.
+**Config**: `configs/tartanair_v04.yaml`
+**Checkpoints**: `checkpoints_v04_tartanair/`
 
-2. **Investigate confidence weight distribution** — Log ConfMLP outputs during
-   training. If weights are all ~1.0 (uniform), the MLP hasn't learned to
-   distinguish inliers from outliers.
+**How it works**:
+- Epochs 1-4: matching-only (no change from paper)
+- Epochs 5-14: before the weighted 8-point, OpenCV RANSAC identifies inlier
+  matches and zeros out outlier weights. The 8-point then sees only clean
+  matches, producing meaningful pose gradients.
+- RANSAC threshold: 3.0 px
+- RANSAC mask is detached (no gradient through RANSAC itself)
+- Gradient still flows through inlier weights -> matching network
 
-3. **Differentiable RANSAC** (DSAC++ style) — Replace weighted 8-point with
-   a differentiable RANSAC layer that is inherently robust to outliers.
+**Why this should work**:
+- Breaks the chicken-and-egg: good poses -> meaningful pose loss -> ConfMLP
+  learns which matches are inliers vs outliers
+- Diagnostic Test 3b showed: OpenCV RANSAC perfectly handles 20% outliers
+  while our unfiltered 8-point fails with 14.7 deg error
+- The model's matching (loss ~4.0) already produces decent correspondences;
+  they just contain outliers that need filtering
 
-4. **Match accuracy supervision** — Add reprojection loss to penalize
-   pixel-level errors, not just assignment probability.
+**What to watch for in training output**:
+- `ransac_inliers=N` in log lines (from epoch 5 onward)
+- If N is very low (<20), matches are very bad — may need more pretraining
+- `pose_raw` should DECREASE over epochs (this is the key metric)
+- If pose_raw drops below ~200 by epoch 8, the fix is working
 
-5. **Longer matching-only pretraining** — 4 epochs may not produce accurate
-   enough correspondences for pose estimation to work.
+**Run command**:
+```bash
+python -m scripts.train --config configs/tartanair_v04.yaml
+```
+
+**After training, evaluate**:
+```bash
+python -m scripts.evaluate --checkpoint checkpoints_v04_tartanair/epoch_13.pth --config configs/default.yaml --max_pairs 200
+```
 
 **Future enhancements** (after base model works):
 - VIO extension (IMU fusion) — solves scale ambiguity, publishable contribution
 - Architecture improvements for better-than-paper results
 - Multi-dataset evaluation (KITTI, TUM)
+- Phase 2: Remove RANSAC, let learned confidence weights take over
 
 **Questions pending for paper authors** (see `EMAIL_TO_AUTHORS.md`):
 1. SVD backward approach confirmation (we used DSAC-style clamping)
@@ -742,8 +761,9 @@ confidence weights can't filter.
 
 **For resuming at Phase 11 (foundation verification)**:
 
-"Diagnostic tests (Phase 11) confirmed: 8-point algorithm is CORRECT on clean data
-but FAILS with outlier matches. Root cause is chicken-and-egg: confidence weights
-need pose loss to learn, but pose loss needs good weights to produce good poses.
-Next step (Phase 12): break the cycle with RANSAC pre-filtering during training.
-See outputs/DIAGNOSTIC_REPORT_2026-04-04.md for full test results."
+"Phase 12 RANSAC fix implemented (v0.4). Run:
+  python -m scripts.train --config configs/tartanair_v04.yaml
+Key metric: pose_raw should DECREASE over epochs 5-14 (was flat at ~500 in v0.3).
+If pose_raw < 200 by epoch 8, the fix works. Evaluate with:
+  python -m scripts.evaluate --checkpoint checkpoints_v04_tartanair/epoch_13.pth --config configs/default.yaml --max_pairs 200
+Full diagnostic report: outputs/DIAGNOSTIC_REPORT_2026-04-04.md"

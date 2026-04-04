@@ -22,6 +22,7 @@ import os
 import sys
 import time
 
+import cv2
 import numpy as np
 import torch
 import yaml
@@ -162,6 +163,77 @@ def build_gt_matches_batch(
 
 
 # ------------------------------------------------------------------ #
+#  RANSAC outlier filtering (Phase 12 fix)                             #
+# ------------------------------------------------------------------ #
+
+@torch.no_grad()
+def ransac_filter_pose(
+    kp1_matched: torch.Tensor,
+    kp2_matched: torch.Tensor,
+    w_matched: torch.Tensor,
+    intrinsics: torch.Tensor,
+    threshold: float = 3.0,
+) -> tuple:
+    """Use OpenCV RANSAC to identify inlier matches, zero-weight outliers.
+
+    This breaks the chicken-and-egg problem: the 8-point algorithm gets
+    clean (inlier-only) matches, producing meaningful pose gradients that
+    allow the ConfMLP to learn which matches are good.
+
+    The RANSAC mask is applied by zeroing outlier weights (not removing them),
+    so tensor shapes stay the same and gradients still flow through inlier weights.
+
+    Also returns the RANSAC-estimated R, t as a better pose target for the
+    pose loss (optional — can still use GT pose).
+
+    Args:
+        kp1_matched: (B, M, 2) matched keypoints in image 1.
+        kp2_matched: (B, M, 2) matched keypoints in image 2.
+        w_matched:   (B, M) per-match confidence weights.
+        intrinsics:  (B, 3, 3) camera intrinsics K.
+        threshold:   RANSAC inlier threshold in pixels.
+
+    Returns:
+        w_filtered:    (B, M) weights with outliers zeroed.
+        inlier_counts: list of int — number of inliers per batch element.
+    """
+    B = kp1_matched.shape[0]
+    w_filtered = w_matched.clone()
+    inlier_counts = []
+
+    for b in range(B):
+        pts1 = kp1_matched[b].cpu().numpy().astype(np.float64)
+        pts2 = kp2_matched[b].cpu().numpy().astype(np.float64)
+        K = intrinsics[b].cpu().numpy().astype(np.float64)
+
+        # Skip if too few non-zero-weight matches
+        valid = w_matched[b] > 1e-6
+        n_valid = valid.sum().item()
+        if n_valid < 8:
+            inlier_counts.append(0)
+            continue
+
+        try:
+            E, mask = cv2.findEssentialMat(
+                pts1, pts2, K,
+                method=cv2.RANSAC,
+                prob=0.999,
+                threshold=threshold,
+            )
+            if mask is not None:
+                mask_t = torch.tensor(mask.flatten(), dtype=torch.bool, device=w_matched.device)
+                # Zero out outlier weights
+                w_filtered[b] = w_matched[b] * mask_t.float()
+                inlier_counts.append(mask_t.sum().item())
+            else:
+                inlier_counts.append(0)
+        except cv2.error:
+            inlier_counts.append(0)
+
+    return w_filtered, inlier_counts
+
+
+# ------------------------------------------------------------------ #
 #  Training loop                                                       #
 # ------------------------------------------------------------------ #
 
@@ -249,6 +321,10 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
     ckpt_interval = cfg["logging"]["checkpoint_interval"]
     lambda_p_start = cfg["training"]["lambda_p_start_epoch"]
     reproj_thr = cfg["model"]["reproj_threshold"]
+    use_ransac = cfg["training"].get("ransac_filter", False)
+    ransac_thr = cfg["training"].get("ransac_threshold", 3.0)
+    if use_ransac:
+        print(f"  RANSAC outlier filtering ENABLED (threshold={ransac_thr}px)")
 
     # --- Mixed precision (AMP) for faster training on RTX GPUs ---
     use_amp = cfg["training"].get("use_amp", True) and device.type == "cuda"
@@ -321,6 +397,36 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
             R_gt = T_gt[:, :3, :3]   # (B, 3, 3)
             t_gt = T_gt[:, :3, 3]    # (B, 3)
 
+            # --- RANSAC filtering (Phase 12): re-estimate pose with inlier-only weights ---
+            R_for_loss = out["R"]
+            t_for_loss = out["t"]
+
+            if use_ransac and epoch >= lambda_p_start:
+                # Get the matched keypoints from the model's internal padding
+                # Re-extract using the same match indices
+                from src.models.dino_vo import _pad_matches
+                matches_list = out["matches"]
+                weights_list = [
+                    torch.nan_to_num(w, nan=0.0, posinf=0.0, neginf=0.0)
+                    for w in out["weights"]
+                ]
+                kp1_m, kp2_m, w_m = _pad_matches(
+                    out["kp1"], out["kp2"], matches_list, weights_list
+                )
+                # Apply RANSAC to zero outlier weights
+                w_filtered, inlier_cts = ransac_filter_pose(
+                    kp1_m, kp2_m, w_m, K, threshold=ransac_thr,
+                )
+                # Re-run pose estimation with filtered weights (still differentiable
+                # through inlier weights — RANSAC mask is detached)
+                with torch.amp.autocast("cuda", enabled=False):
+                    pose_filtered = model.pose_est(
+                        kp1_m.float(), kp2_m.float(),
+                        w_filtered.float(), K.float(),
+                    )
+                R_for_loss = pose_filtered["R"]
+                t_for_loss = pose_filtered["t"]
+
             # --- Loss (in float32 for stability) ---
             loss_dict = loss_fn(
                 out["all_assignments"],
@@ -328,8 +434,8 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
                 out["all_sigma2"],
                 gt_matches,
                 gt_mask,
-                out["R"],
-                out["t"],
+                R_for_loss,
+                t_for_loss,
                 R_gt,
                 t_gt,
             )
@@ -399,11 +505,15 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
 
             if global_step % log_interval == 0:
                 n_gt = gt_mask.sum().item()
+                ransac_info = ""
+                if use_ransac and epoch >= lambda_p_start:
+                    avg_inliers = np.mean(inlier_cts) if inlier_cts else 0
+                    ransac_info = f" ransac_inliers={avg_inliers:.0f}"
                 print(
                     f"  Step {global_step} | "
                     f"total={total_l:.4f} match={match_l:.4f} "
                     f"pose_raw={pose_l:.2f} lp={lp:.4f} | "
-                    f"gt_matches={n_gt} nan_skipped={nan_count}"
+                    f"gt_matches={n_gt} nan_skipped={nan_count}{ransac_info}"
                 )
 
             history["step"].append(global_step)
