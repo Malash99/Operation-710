@@ -18,7 +18,7 @@ The two feature sets are concatenated and projected to the final 192-dim descrip
 
 ## Why Does It Exist?
 
-Matching keypoints between frames requires descriptors that are:
+Matching keypoints between frames requires descriptors that are:λp
 
 - **Discriminative** — each keypoint has a unique signature so wrong matches can be rejected
 - **Robust** — similar appearance in different lighting or viewing angles should produce similar descriptors

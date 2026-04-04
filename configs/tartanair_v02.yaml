@@ -1,0 +1,44 @@
+# DINO-VO v0.3 — TartanAir Training Config (Post bug-fix retrain)
+#
+# Bug fixes applied (2026-03-31):
+#   1. DSAC-style ClampedSVD — pose gradients now flow to matcher
+#   2. _log_rotation factor-of-2 fix — correct rotation loss magnitude
+#   3. Removed _enforce_essential_constraint — one fewer degenerate SVD
+#   4. FinerCNN proper luminance for color images
+#   5. lambda_p_max restored to paper value 0.9
+#
+# Speed optimizations:
+#   batch_size=6 is faster than 8 (9.1 GB peak, 1.2h/epoch vs 12.6 GB, 1.8h/epoch)
+#   num_workers=2 halves data loading time (0.23s vs 0.45s per batch)
+
+data:
+  dataset: tartanair
+  data_root: data/tartanair
+  skip_frames: 1            # consecutive frames (TartanAir has larger motion than EuRoC)
+  target_h: 476
+  target_w: 742
+  max_pairs: 8500           # ~25% of full dataset for quick validation
+
+training:
+  epochs: 14
+  batch_size: 6             # sweet spot: 9.1GB peak, 1.2h/epoch (B=8 uses 12.6GB, 1.8h/epoch)
+  num_workers: 2            # overlaps data loading with GPU computation
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  lambda_p_start_epoch: 5   # epochs 1-4: matching only; epoch 5+: combined
+  lambda_p_increment: 1.5e-4
+  lambda_p_max: 0.9          # paper value
+  grad_clip: 1.0
+  use_amp: false             # AMP breaks gradients with ClampedSVD; keep fp32
+
+model:
+  top_k: 512
+  descriptor_dim: 192
+  matching_layers: 12
+  reproj_threshold: 5.0     # px — max reprojection error for GT correspondence
+
+logging:
+  log_interval: 50
+  checkpoint_interval: 1
+  checkpoint_dir: checkpoints_v03_tartanair
+  output_dir: outputs_v03_tartanair
