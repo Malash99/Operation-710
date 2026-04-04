@@ -11,7 +11,30 @@
       "Bash(PYTHONPATH=. python scripts/test_audit_fixes.py)",
       "Bash(PYTHONPATH=. python scripts/test_feature_descriptor.py)",
       "Bash(gh pr:*)",
-      "Bash(python -m scripts.test_stereo_depth)"
+      "Bash(python -m scripts.test_stereo_depth)",
+      "Bash(sed -n '37,60p' src/models/keypoint_detector.py)",
+      "Bash(sed -n '41,65p' src/models/feature_descriptor.py)",
+      "Bash(sed -n '321,365p' src/models/feature_matching.py)",
+      "Bash(nvidia-smi:*)",
+      "Bash(python -m scripts.train --resume checkpoints/epoch_04.pth --max_steps 5)",
+      "Bash(grep -n \"λ\\\\|\\\\\\\\u03bb\" scripts/train.py)",
+      "Bash(cd:*)",
+      "Bash(python -m scripts.train --resume checkpoints/epoch_04.pth --max_steps 60)",
+      "Bash(timeout 120 python -m scripts.train --resume checkpoints/epoch_04.pth --max_steps 10)",
+      "Bash(python3:*)",
+      "Bash(xargs grep:*)",
+      "Bash(python -m scripts.train --config configs/default.yaml --max_steps 5)",
+      "Bash(python -m scripts.train --config configs/default.yaml --max_steps 20)",
+      "Bash(python -m scripts.train --config configs/default.yaml --max_steps 3)",
+      "Bash(python -m scripts.train --config configs/default.yaml --max_steps 30)",
+      "Bash(ls:*)",
+      "Bash(pdftotext -layout \"2507.13145v1.pdf\" -)",
+      "WebFetch(domain:theairlab.org)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:tartanair.org)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(python -m scripts.evaluate --checkpoint checkpoints_v03_tartanair/epoch_13.pth --config configs/default.yaml --max_pairs 200)",
+      "Bash(python -m scripts.diagnostic_tests)"
     ]
   }
 }

@@ -530,45 +530,220 @@ All core pipeline phases are complete:
 
 ---
 
-### 🚧 Phase 10: TartanAir Dataset + Training (NEXT)
+### ✅ Phase 10: TartanAir Dataset + Training (COMPLETED — partial)
 
 **Why TartanAir**: The paper trains ONLY on TartanAir (Section IV-A). EuRoC is evaluation-only.
-TartanAir has GT depth maps (perfect, not stereo-estimated), larger camera motions, and
-diverse environments — all of which should fix the SVD NaN issue and allow pose loss to converge.
 
-**Next Steps** (in order):
+#### Completed:
+- Downloaded TartanAir (5 environments: carwelding, japanesealley, ocean, office, office2)
+- Built TartanAir dataloader (`src/datasets/tartanair.py`)
+- 41 trajectories, 34309 pairs total, training uses 8500 pairs
+- Ran 8 epochs of training (checkpoints in `checkpoints_v02_tartanair/`)
 
-#### Step 1: Download TartanAir
-- TartanAir v1: https://theairlab.org/tartanair-dataset/
-- Need: RGB images (left camera), depth maps, camera poses
-- Start with a few environments (e.g., `abandonedfactory`, `hospital`)
-- Paper doesn't specify which environments — likely uses many for diversity
-- Total dataset is ~1TB; download selectively
+#### Training Results (v0.2, 8 epochs):
+- Epochs 1-4 (matching only): loss converges 6.29 → 4.52, zero NaN
+- Epochs 5-8 (pose added): pose_raw stays flat ~540, matching degrades to 6.6
+- **Pose loss does NOT converge** — root cause identified (see Debug Audit below)
 
-#### Step 2: Build TartanAir Dataloader
-- Create `src/datasets/tartanair.py`
-- TartanAir format: RGB PNG images, depth as .npy, poses as text file
-- Pose format: [tx ty tz qx qy qz qw] per line (NED frame)
-- Depth: float32 .npy files, values in meters
-- Image resolution: 640×480 → resize to match paper's training resolution
-- GT correspondences: use TartanAir's perfect depth (no stereo estimation needed)
+---
 
-#### Step 3: Retrain on TartanAir
-- Same hyperparameters as paper (Section IV-A)
-- Expect: pose loss should converge, NaN rate should drop significantly
-- Save checkpoints to `checkpoints_v02_tartanair/`
+### 🔧 Debug Audit (2026-03-31): 4 bugs found
 
-#### Step 4: Evaluate on EuRoC
-- Run evaluation on MH_01 through MH_05
-- Compare ATE with paper's Table I results
-- Tag as `v0.2-tartanair`
+See `DEBUG_AUDIT_2026-03-31.md` for full details.
+
+#### Bug 1 — CRITICAL (ROOT CAUSE): SVD backward degeneracy
+- Essential matrix has singular values (s, s, 0)
+- PyTorch SVD backward involves 1/(si²-sj²) → NaN when s1=s2
+- Old workaround (`_sanitize_svd_grad`) zeroed NaN → destroyed gradient entirely
+- **FIX APPLIED**: Implemented DSAC-style `ClampedSVD` autograd function
+  that clamps 1/(si²-sj²) to [-1e6, 1e6] instead of NaN
+- Verified: pose loss gradient now flows to all weights (was dead before)
+
+#### Bug 2 — `_log_rotation` factor-of-2 error
+- `scale = theta / (2 * sin_theta)` should be `theta / sin_theta`
+- The `/ 2` in `skew = (R - R^T) / 2` already accounts for the factor
+- Result was exactly half correct → effective λ_r=90 instead of 180
+- **FIX APPLIED**: Changed scale formula
+
+#### Bug 3 — `_enforce_essential_constraint` unnecessary
+- Paper does NOT mention projecting E onto Essential manifold
+- This step forced exact SVD degeneracy, making Bug 1 worse
+- **FIX APPLIED**: Removed — raw E from 8-point is decomposed directly
+
+#### Bug 4 — FinerCNN grayscale for color images
+- Used channel 0 (red only) instead of proper grayscale
+- **FIX APPLIED**: Uses ITU-R BT.601 luminance (0.299R + 0.587G + 0.114B)
+
+#### Config fix:
+- `lambda_p_max` restored from 0.3 to 0.9 (paper value)
+
+---
+
+### ✅ Phase 10b: Retrain with Bug Fixes (COMPLETED)
+
+**Date Completed**: April 4, 2026
+
+All four bugs fixed. Retrained from scratch on TartanAir (v0.3), 14 epochs.
+Checkpoints saved in `checkpoints_v03_tartanair/`.
+
+#### v0.3 Training Results (14 epochs, 1417 steps/epoch, lambda_p_max=0.9):
+
+| Epoch | avg_match | avg_pose | lp | nan_skipped |
+|-------|-----------|----------|----|-------------|
+| 1 | 5.42 | 0.0 | 0.0 | 0 |
+| 2 | 4.72 | 0.0 | 0.0 | 0 |
+| 3 | 4.47 | 0.0 | 0.0 | 0 |
+| 4 | 4.21 | 0.0 | 0.0 | 0 |
+| 5-8 | ~4.0 | ~510 | 0.0→0.9 | 30 |
+| 9 | 4.06 | 512.8 | 0.9 | 30 |
+| 10 | 4.10 | 506.7 | 0.9 | 30 |
+| 11 | 4.08 | 501.2 | 0.9 | 30 |
+| 12 | 4.04 | 506.5 | 0.9 | 30 |
+| 13 | 4.00 | 502.2 | 0.9 | 30 |
+| 14 | ~4.1 | ~500 | 0.9 | 30 |
+
+**What improved vs v0.2**:
+- Matching loss: 4.0 (v0.3) vs 6.6 (v0.2) — bug fixes helped matching
+- NaN: 30/epoch stable (v0.3) vs 0 but only because lp was capped at 0.3 (v0.2)
+- ClampedSVD working — gradients flow, no explosion
+- Training 2x faster (~3.2s/it vs ~6.7s/it)
+
+**What did NOT improve**:
+- **Pose loss stays flat at ~500 for 10 epochs** — NOT converging
+- 30 NaN steps/epoch constant (degenerate pairs)
+- Bug fixes were necessary but NOT sufficient for pose convergence
+
+#### v0.3 Evaluation on EuRoC MH_01 (epoch 13, 200 pairs):
+
+| Metric | v0.3 Result | Paper Target |
+|--------|-------------|-------------|
+| ATE RMSE | 0.503 m | ~0.05 m |
+| ATE Mean | 0.423 m | — |
+| Rotation Error (mean) | 25.5 deg | ~2-5 deg |
+| Avg matches/pair | 257 | ~512 |
+| Scale factor | 0.036 | ~1.0 |
+
+- Trajectory plot: `outputs/trajectory_epoch_13.png`
+- Results text: `outputs/eval_epoch_13.txt`
+- Predicted trajectory has rough shape but diverges significantly from GT
+- ~10x off from paper's reported results
+
+---
+
+### 🔧 Diagnosis (2026-04-04): Pose Pipeline Foundation Unverified
+
+**Core finding**: Bug fixes solved NaN/gradient flow, but pose loss (~500) is flat.
+This means the gradient FROM pose loss reaches the matching weights but does NOT
+produce useful learning signal. The matches improve (loss 4.0) but are not
+geometrically accurate enough for the 8-point algorithm.
+
+**Critical question**: Does our weighted 8-point algorithm work correctly at all?
+We have NEVER tested it with known-correct inputs.
+
+#### Diagnostic Tests Needed (before any further training):
+
+1. **Test 1 — 8-point with GT correspondences**: Feed perfect pixel correspondences
+   (from GT pose + depth reprojection) with uniform weights. Should recover correct R, t.
+   If fails → implementation bug in pose_estimation.py.
+
+2. **Test 2 — Pose loss sanity check**: Compute L_pose(R_gt, t_gt, R_gt, t_gt).
+   Must be exactly 0. Small perturbations → small loss proportional to perturbation.
+
+3. **Test 3 — Compare with OpenCV**: Take model's matched keypoints, run
+   cv2.findEssentialMat with RANSAC. If OpenCV gets good poses but ours doesn't
+   → our 8-point is wrong. If both fail → matches are bad.
+
+4. **Test 4 — Gradient flow magnitude**: Check torch.autograd.grad(pose_loss,
+   matching_weights) — is gradient nonzero and reasonable magnitude?
+
+**Why this matters**: If the 8-point algorithm itself is broken, no amount of
+training will fix pose convergence. Must verify foundation before ANY enhancements.
+
+---
+
+### ✅ Phase 11: Foundation Verification (COMPLETED)
+
+**Date Completed**: April 4, 2026
+
+Ran 4 diagnostic tests (script: `scripts/diagnostic_tests.py`).
+Full report: `outputs/DIAGNOSTIC_REPORT_2026-04-04.md`
+
+#### Results: 10 PASS, 1 FAIL, 1 SKIP
+
+**8-point algorithm: CORRECT on clean data**
+- Synthetic (100 perfect correspondences): 0.04 deg rotation, 0.00 deg translation
+- The implementation is mathematically correct — NOT the root cause
+
+**8-point algorithm: FAILS with outliers or noisy matches**
+- 20% outlier matches: 3.8 deg rot, 14.7 deg trans (OpenCV RANSAC: 0.0 deg)
+- Real EuRoC optical flow matches: 3.2 deg rot, **112 deg trans** (catastrophic)
+- Translation is the weakest link — extremely sensitive to outlier matches
+
+**Pose loss: CORRECT**
+- L(R_gt, t_gt, R_gt, t_gt) = 0.0000 (exact)
+- _log_rotation: exact for 5/30/90/170 deg
+- Proportional scaling verified for both rotation and translation
+
+**Gradient flow: WORKS but partial**
+- 67.7% of parameters receive nonzero gradient from pose loss
+- Deeper transformer layers (8-11) get ZERO gradient
+- Gradient reaches conf_mlp (largest) and early matching layers
+
+#### Root Cause Identified: Chicken-and-Egg Problem
+
+The paper relies on **learned confidence weights** (ConfMLP) to replace RANSAC.
+The 8-point algorithm needs good weights to downweight outlier matches.
+But the weights can only learn from pose loss, which needs good weights to
+produce meaningful poses. **Circular dependency.**
+
+Training observation: pose_raw ~500 corresponds to ~90 deg translation error
+(confirmed by Test 2c: 90 deg -> loss 565). The model predicts near-random
+translation directions because matches contain outliers that the uniform
+confidence weights can't filter.
+
+---
+
+### 🚧 Phase 12: Break the Chicken-and-Egg Problem (NEXT)
+
+**Recommended approaches** (in priority order):
+
+1. **RANSAC pre-filtering during training** — Use OpenCV RANSAC to filter
+   outlier matches before the weighted 8-point. This breaks the circular
+   dependency: good poses -> meaningful pose loss -> ConfMLP learns weights.
+   Later, remove RANSAC and let learned weights take over.
+
+2. **Investigate confidence weight distribution** — Log ConfMLP outputs during
+   training. If weights are all ~1.0 (uniform), the MLP hasn't learned to
+   distinguish inliers from outliers.
+
+3. **Differentiable RANSAC** (DSAC++ style) — Replace weighted 8-point with
+   a differentiable RANSAC layer that is inherently robust to outliers.
+
+4. **Match accuracy supervision** — Add reprojection loss to penalize
+   pixel-level errors, not just assignment probability.
+
+5. **Longer matching-only pretraining** — 4 epochs may not produce accurate
+   enough correspondences for pose estimation to work.
+
+**Future enhancements** (after base model works):
+- VIO extension (IMU fusion) — solves scale ambiguity, publishable contribution
+- Architecture improvements for better-than-paper results
+- Multi-dataset evaluation (KITTI, TUM)
+
+**Questions pending for paper authors** (see `EMAIL_TO_AUTHORS.md`):
+1. SVD backward approach confirmation (we used DSAC-style clamping)
+2. Essential matrix projection (we removed it)
+3. TartanAir training resolution (we use 476×742, may differ)
+4. Which TartanAir environments they trained on
 
 ---
 
 ## Start Command
 
-**For resuming at Phase 10**:
+**For resuming at Phase 11 (foundation verification)**:
 
-"Phases 1-9 are complete (tagged v0.1-euroc-baseline). The model trains but pose loss
-doesn't converge on EuRoC due to small motions and SVD instability. Next: download
-TartanAir dataset and build a dataloader for it, then retrain as the paper does."
+"Diagnostic tests (Phase 11) confirmed: 8-point algorithm is CORRECT on clean data
+but FAILS with outlier matches. Root cause is chicken-and-egg: confidence weights
+need pose loss to learn, but pose loss needs good weights to produce good poses.
+Next step (Phase 12): break the cycle with RANSAC pre-filtering during training.
+See outputs/DIAGNOSTIC_REPORT_2026-04-04.md for full test results."
