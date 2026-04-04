@@ -1,0 +1,24 @@
+DINO-VO Evaluation Results
+==================================================
+Checkpoint: checkpoints_v03_tartanair/epoch_13.pth
+Epoch: 13
+Sequence: data/euroc/MH_01_easy
+Pairs evaluated: 200
+Skip frames: 2
+Inference time: 94.9s (2.1 pairs/sec)
+Avg matches per pair: 257
+
+Scale factor: 0.0364
+GT path length: 7.273 m
+Pred path length (unscaled): 199.999 m
+Pred path length (scaled): 7.273 m
+
+ATE RMSE:   0.5026 m
+ATE Mean:   0.4228 m
+ATE Median: 0.3461 m
+ATE Std:    0.2717 m
+ATE Max:    1.0884 m
+
+Rotation Mean:   25.53 deg
+Rotation Median: 17.19 deg
+Rotation Max:    53.09 deg
