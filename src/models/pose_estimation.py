@@ -20,6 +20,12 @@ Key property: The entire pipeline is differentiable — gradients flow
 from the pose loss (Eq. 13) back through SVD, through the weights,
 and into the matching transformer.
 
+SVD backward stability (DSAC-style):
+    The Essential matrix has degenerate singular values (s, s, 0).
+    Standard SVD backward involves 1/(s_i^2 - s_j^2) which is undefined
+    when s_i = s_j. Following DSAC (Brachmann et al. [5]), we clamp
+    these terms to a maximum value instead of allowing NaN/Inf.
+
 Input:
     kp1, kp2:    (B, M, 2) matched keypoint pixel coordinates
     weights:     (B, M)    per-match confidence weights from Phase 5
@@ -32,6 +38,128 @@ Output:
 
 import torch
 import torch.nn as nn
+
+
+# ---------------------------------------------------------------------------
+# DSAC-style SVD with clamped backward (handles degenerate singular values)
+# ---------------------------------------------------------------------------
+
+class ClampedSVD(torch.autograd.Function):
+    """SVD with clamped backward pass for degenerate singular values.
+
+    Standard SVD backward involves F_ij = 1/(s_i^2 - s_j^2), which is
+    undefined when s_i = s_j (as in the Essential matrix with (s, s, 0)).
+
+    Following DSAC (Brachmann et al., CVPR 2017), we clamp F_ij to
+    [-max_val, max_val] instead of allowing NaN/Inf. This preserves
+    gradient direction while bounding magnitude.
+
+    Reference: Ionescu et al., "Matrix Backpropagation for Deep Networks
+    with Structured Layers", ICCV 2015 — Eq. 4 for SVD backward.
+    """
+
+    MAX_CLAMP = 1e6  # clamp bound for 1/(si^2 - sj^2)
+
+    @staticmethod
+    def forward(ctx, A):
+        U, S, Vt = torch.linalg.svd(A, full_matrices=True)
+        ctx.save_for_backward(U, S, Vt)
+        return U, S, Vt
+
+    @staticmethod
+    def backward(ctx, dU, dS, dVt):
+        U, S, Vt = ctx.saved_tensors
+        V = Vt.transpose(-2, -1)
+        Ut = U.transpose(-2, -1)
+
+        M, N = U.shape[-2], Vt.shape[-1]
+        K = S.shape[-1]  # min(M, N)
+
+        # F matrix: F_ij = 1/(s_j^2 - s_i^2), clamped for stability
+        s_sq = S.unsqueeze(-1) ** 2  # (..., K, 1)
+        diff = s_sq.transpose(-2, -1) - s_sq  # (..., K, K) = s_j^2 - s_i^2
+        # Clamp: avoid division by zero, preserve sign
+        diff_clamped = torch.where(
+            diff.abs() < 1e-10,
+            torch.full_like(diff, 1e-10).copysign(diff + 1e-30),
+            diff,
+        )
+        F = 1.0 / diff_clamped
+        F = F.clamp(-ClampedSVD.MAX_CLAMP, ClampedSVD.MAX_CLAMP)
+        # Zero the diagonal (i == j terms should not contribute)
+        F.diagonal(dim1=-2, dim2=-1).zero_()
+
+        # dL/dA = U @ (dS_diag + F * (Ut @ dU - dVt^T @ V) * S_diag) @ Vt
+        #       + (I - U @ Ut) @ dU @ S_inv @ Vt  [only if M > K]
+        #       + U @ S_inv @ dVt @ (I - V @ Vt)  [only if N > K]
+
+        # Core term
+        S_diag = torch.diag_embed(S)  # (..., K, K)
+        Ut_dU = Ut @ dU  # (..., K, K) — only first K cols of dU matter
+        dVt_V = dVt @ V  # (..., K, K) — only first K rows of dVt matter
+
+        # Symmetric and antisymmetric parts
+        sym = Ut_dU + dVt_V.transpose(-2, -1)  # should be zero on diagonal ideally
+        core = F * (Ut_dU - dVt_V.transpose(-2, -1))
+
+        # Add diagonal from dS
+        dS_diag = torch.diag_embed(dS) if dS is not None else torch.zeros_like(S_diag)
+        inner = dS_diag + core @ S_diag + S_diag @ core.transpose(-2, -1)
+
+        # Simplified: for square or near-square matrices typical in our use
+        # dA = U @ inner @ Vt
+        # This is the main term; the rectangular correction terms are negligible
+        # for our 3x3 and (M,9) cases.
+
+        # Actually, use the full formula from Ionescu et al.:
+        # dA = U @ (diag(dS) + F*(Ut@dU)*S + S*(F*(Vt@dV))^T ) @ Vt
+        # Simplification for full SVD of square matrix:
+
+        # For a cleaner derivation: use the formula from
+        # https://j-towns.github.io/papers/svd-derivative.pdf
+        # dA = U @ (dSigma + F.*(Ut dU) Sigma + Sigma F.*(dVt V)^T) @ Vt
+
+        Ut_dU_F = F * (Ut @ dU[..., :K, :K] if dU.shape[-1] > K else Ut @ dU)
+
+        # Handle dU shape: dU is (..., M, M) for full_matrices, we need (..., M, K)
+        # For our uses: 3x3 (K=3=M=N) or (M, 9) with K=9=N
+        # So M >= K always, and we use full_matrices=True
+
+        # Rebuild using simpler stable formula:
+        # dA = U (dS_diag + F * (Ut dU) S_diag + S_diag F * (Vt dV)^T) Vt
+        dV = dVt.transpose(-2, -1)
+
+        term_U = F * (Ut[..., :K, :] @ dU[..., :, :K])  # (..., K, K)
+        term_V = F * (Vt[..., :K, :] @ dV[..., :, :K])  # (..., K, K)
+
+        middle = dS_diag + term_U @ S_diag + S_diag @ term_V.transpose(-2, -1)
+
+        dA = U[..., :, :K] @ middle @ Vt[..., :K, :]
+
+        # Replace any remaining NaN/Inf (safety net)
+        dA = torch.nan_to_num(dA, nan=0.0, posinf=0.0, neginf=0.0)
+
+        return dA
+
+
+def clamped_svd(A: torch.Tensor):
+    """Compute SVD with DSAC-style clamped backward pass.
+
+    Use this instead of torch.linalg.svd when the matrix may have
+    repeated singular values (e.g., the Essential matrix).
+
+    Args:
+        A: (..., M, N) input matrix.
+
+    Returns:
+        U: (..., M, M) left singular vectors.
+        S: (..., min(M,N)) singular values.
+        Vt: (..., N, N) right singular vectors (transposed).
+    """
+    if A.requires_grad:
+        return ClampedSVD.apply(A)
+    else:
+        return torch.linalg.svd(A, full_matrices=True)
 
 
 class PoseEstimation(nn.Module):
@@ -145,8 +273,7 @@ class PoseEstimation(nn.Module):
         w_sqrt = weights.sqrt().unsqueeze(-1)  # (B, M, 1)
         Phi_w = Phi * w_sqrt  # (B, M, 9)
 
-        # SVD of weighted constraint matrix
-        # U: (B, M, M), S: (B, min(M,9)), Vt: (B, 9, 9)
+        # SVD of weighted constraint matrix — non-degenerate, standard SVD is fine
         _, _, Vt = torch.linalg.svd(Phi_w, full_matrices=True)
 
         # Essential matrix = last column of V = last row of Vt
@@ -155,42 +282,13 @@ class PoseEstimation(nn.Module):
 
         return E
 
-    def _enforce_essential_constraint(
-        self, E: torch.Tensor,
-    ) -> torch.Tensor:
-        """Project E onto the Essential matrix manifold.
-
-        An Essential matrix has two equal singular values and one zero:
-            E = U @ diag(1, 1, 0) @ Vt
-
-        This projection ensures E is a valid Essential matrix,
-        which is required for the decomposition into (R, t).
-
-        Args:
-            E: (B, 3, 3) — raw Essential matrix from 8-point.
-
-        Returns:
-            E_proj: (B, 3, 3) — projected Essential matrix.
-        """
-        U, S, Vt = torch.linalg.svd(E)
-
-        # Force singular values to (1, 1, 0)
-        # Use mean of top-2 singular values for numerical stability
-        s_mean = (S[:, 0] + S[:, 1]) / 2.0  # (B,)
-        S_new = torch.zeros_like(S)
-        S_new[:, 0] = s_mean
-        S_new[:, 1] = s_mean
-        # S_new[:, 2] = 0  (already zero)
-
-        # Reconstruct
-        E_proj = U @ torch.diag_embed(S_new) @ Vt
-
-        return E_proj
-
     def _decompose_essential(
         self, E: torch.Tensor,
     ) -> tuple:
         """Decompose Essential matrix into four (R, t) candidates.
+
+        Uses DSAC-style clamped SVD backward to handle the degenerate
+        singular values (s, s, 0) of the Essential matrix.
 
         E = U @ diag(1, 1, 0) @ Vt
 
@@ -203,13 +301,14 @@ class PoseEstimation(nn.Module):
         where W = [[0,-1,0],[1,0,0],[0,0,1]] is a 90-degree rotation.
 
         Args:
-            E: (B, 3, 3) — Essential matrix (should satisfy essential constraint).
+            E: (B, 3, 3) — Essential matrix.
 
         Returns:
             R_candidates: (B, 4, 3, 3) — four rotation candidates.
             t_candidates: (B, 4, 3)     — four translation candidates.
         """
-        U, _, Vt = torch.linalg.svd(E)
+        # Use clamped SVD for stable backward through degenerate (s, s, 0)
+        U, S, Vt = clamped_svd(E)
 
         # Ensure proper rotation (det = +1)
         # If det(U) < 0, flip sign of last column
@@ -274,32 +373,6 @@ class PoseEstimation(nn.Module):
             R = R_candidates[:, c]  # (B, 3, 3)
             t = t_candidates[:, c]  # (B, 3)
 
-            # Triangulate using the DLT (linear) method
-            # Camera 1: P1 = [I | 0],  Camera 2: P2 = [R | t]
-            # For each point, check if depth > 0 in both cameras
-
-            # Depth in camera 1 frame:
-            # Using the relation: depth1 * x1 = X  (3D point in cam1)
-            # and depth2 * x2 = R @ X + t  (3D point in cam2)
-            #
-            # From the second: X = R^T @ (depth2 * x2 - t)
-            # Substituting: depth1 * x1 = R^T @ (depth2 * x2 - t)
-            #
-            # Cross product elimination to solve for depths:
-            # x2 x (R @ x1 * d1 + t) = 0  →  solve for d1
-            # We use a simplified check: compute depth via the z-component
-
-            # Method: for each point, compute the 3D position via mid-point
-            # triangulation and check z > 0 in both frames.
-
-            # Simplified approach: use the constraint that z-depth must be
-            # positive in both cameras. Compute depth in cam1 via:
-            #   [x2]x @ (R @ x1 @ d1 + t) = 0
-            # where [x2]x is the skew-symmetric matrix of x2.
-
-            # For efficiency, use a batch-compatible approach:
-            # depth1 = -(t x x2) . (R@x1 x x2) / |R@x1 x x2|^2
-
             Rx1 = (R.unsqueeze(1) @ x1.unsqueeze(-1)).squeeze(-1)  # (B, M, 3)
 
             # Cross products
@@ -309,8 +382,6 @@ class PoseEstimation(nn.Module):
             )  # (B, M, 3)
 
             # Depth in camera 1:
-            # d1 = -[(x2 x t) . (x2 x Rx1)] / |x2 x Rx1|^2
-            #     = -[(t x x2) . (Rx1 x x2)] / |Rx1 x x2|^2
             num = -(t_cross_x2 * Rx1_cross_x2).sum(dim=-1)     # (B, M)
             denom = (Rx1_cross_x2 * Rx1_cross_x2).sum(dim=-1)  # (B, M)
             depth1 = num / (denom + 1e-8)                        # (B, M)
@@ -334,7 +405,6 @@ class PoseEstimation(nn.Module):
             )
 
         # Gather best R and t
-        # best_idx: (B,) indices into dim=1 of candidates
         b_idx = torch.arange(B, device=R_candidates.device)
         R_best = R_candidates[b_idx, best_idx]  # (B, 3, 3)
         t_best = t_candidates[b_idx, best_idx]  # (B, 3)
@@ -363,31 +433,29 @@ class PoseEstimation(nn.Module):
             dict with:
                 'R':         (B, 3, 3) — estimated rotation matrix
                 't':         (B, 3)    — estimated unit translation vector
-                'E':         (B, 3, 3) — Essential matrix (projected)
-                'E_raw':     (B, 3, 3) — Essential matrix (before projection)
+                'E':         (B, 3, 3) — Essential matrix (raw from 8-point)
         """
-        # Step 1: Pixel → normalized camera coordinates
+        # Step 1: Pixel -> normalized camera coordinates
         x1 = self._pixel_to_normalized(kp1, intrinsics)  # (B, M, 3)
         x2 = self._pixel_to_normalized(kp2, intrinsics)  # (B, M, 3)
 
         # Step 2: Build epipolar constraint matrix (Eq. 11)
         Phi = self._build_epipolar_constraint(x1, x2)  # (B, M, 9)
 
-        # Step 3: Weighted 8-point algorithm → Essential matrix
-        E_raw = self._weighted_eight_point(Phi, weights)  # (B, 3, 3)
+        # Step 3: Weighted 8-point algorithm -> Essential matrix
+        E = self._weighted_eight_point(Phi, weights)  # (B, 3, 3)
 
-        # Step 4: Project onto Essential manifold (enforce rank-2, equal SVs)
-        E = self._enforce_essential_constraint(E_raw)  # (B, 3, 3)
-
-        # Step 5: Decompose E → four (R, t) candidates
+        # Step 4: Decompose E -> four (R, t) candidates
+        # Uses clamped SVD for stable backward through degenerate (s, s, 0)
+        # Note: no Essential manifold projection — decompose raw E directly
+        # (paper does not mention projection; raw E is approximately Essential)
         R_candidates, t_candidates = self._decompose_essential(E)
 
-        # Step 6: Cheirality check → select best (R, t)
+        # Step 5: Cheirality check -> select best (R, t)
         R, t = self._cheirality_check(R_candidates, t_candidates, x1, x2)
 
         return {
             "R": R,           # (B, 3, 3)
             "t": t,           # (B, 3)
             "E": E,           # (B, 3, 3)
-            "E_raw": E_raw,   # (B, 3, 3)
         }

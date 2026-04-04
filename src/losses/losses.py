@@ -56,8 +56,13 @@ def _log_rotation(R: torch.Tensor) -> torch.Tensor:
     # Skew-symmetric part: (R - R^T) / 2
     skew = (R - R.transpose(-1, -2)) / 2.0  # (B, 3, 3)
 
-    # Scale factor: theta / (2 * sin(theta))
-    scale = theta / (2.0 * sin_theta)  # (B,)
+    # Scale factor: theta / sin(theta)
+    # Rodrigues: [omega]_x = (R - R^T) * theta / (2*sin(theta))
+    # Since skew = (R - R^T) / 2, we need scale = theta / sin(theta)
+    # so that skew * scale = (R - R^T) / 2 * theta / sin(theta)
+    #                      = (R - R^T) * theta / (2*sin(theta))  [correct]
+    # Previous bug: scale was theta/(2*sin_theta), giving half the correct value.
+    scale = theta / sin_theta  # (B,)
 
     # Extract rotation vector from skew-symmetric matrix
     wx = skew[:, 2, 1]  # (B,)

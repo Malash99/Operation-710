@@ -80,15 +80,23 @@ class FinerCNN(nn.Module):
         self.fuse_full = _basic_layer(64, out_channels, stride=1)
 
         # ImageNet normalization constants (for recovering grayscale)
+        # Per-channel mean and std for proper luminance conversion
         self.register_buffer(
-            "img_mean", torch.tensor(0.485, dtype=torch.float32)
+            "img_mean", torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(1, 3, 1, 1)
         )
         self.register_buffer(
-            "img_std", torch.tensor(0.229, dtype=torch.float32)
+            "img_std", torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(1, 3, 1, 1)
+        )
+        # ITU-R BT.601 luminance weights (same as cv2.COLOR_RGB2GRAY)
+        self.register_buffer(
+            "lum_weights", torch.tensor([0.299, 0.587, 0.114], dtype=torch.float32).view(1, 3, 1, 1)
         )
 
     def _recover_grayscale(self, image: torch.Tensor) -> torch.Tensor:
         """Recover grayscale [0, 1] from ImageNet-normalized 3-channel tensor.
+
+        Uses ITU-R BT.601 luminance: 0.299*R + 0.587*G + 0.114*B.
+        Works correctly for both grayscale-repeated (EuRoC) and true RGB (TartanAir).
 
         Args:
             image: (B, 3, H, W) — ImageNet-normalized tensor.
@@ -96,8 +104,12 @@ class FinerCNN(nn.Module):
         Returns:
             (B, 1, H, W) — grayscale values in [0, 1].
         """
-        gray = image[:, 0:1] * self.img_std + self.img_mean
-        return gray.clamp(0.0, 1.0)
+        # Undo ImageNet normalization to recover [0, 1] RGB
+        rgb = image * self.img_std + self.img_mean  # (B, 3, H, W)
+        rgb = rgb.clamp(0.0, 1.0)
+        # Weighted sum for proper luminance
+        gray = (rgb * self.lum_weights).sum(dim=1, keepdim=True)  # (B, 1, H, W)
+        return gray
 
     def forward(self, image: torch.Tensor) -> torch.Tensor:
         """Extract fine-grained features at full resolution via feature pyramid.
