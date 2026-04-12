@@ -343,6 +343,7 @@ def evaluate(checkpoint_path: str, cfg: dict, max_pairs: int = None):
         top_k=cfg["model"]["top_k"],
         descriptor_dim=cfg["model"]["descriptor_dim"],
         matching_layers=cfg["model"]["matching_layers"],
+        coord_normalization=cfg.get("training", {}).get("coord_normalization", "K_inv"),
     )
     model.load_dino(device)
     model = model.to(device)

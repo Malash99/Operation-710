@@ -60,9 +60,11 @@ class TartanAirTrajectory(Dataset):
         skip_frames: int = 1,
         target_h: int = 476,
         target_w: int = 742,
+        augmentation: bool = False,
     ):
         self.trajectory_path = trajectory_path
         self.skip_frames = skip_frames
+        self.augmentation = augmentation
         self.target_h = target_h
         self.target_w = target_w
 
@@ -124,6 +126,11 @@ class TartanAirTrajectory(Dataset):
         img1 = cv2.resize(img1, (self.target_w, self.target_h), interpolation=cv2.INTER_LINEAR)
         img2 = cv2.resize(img2, (self.target_w, self.target_h), interpolation=cv2.INTER_LINEAR)
 
+        # Data augmentation (applied BEFORE normalization, on uint8 images)
+        if self.augmentation:
+            img1 = self._augment(img1)
+            img2 = self._augment(img2)
+
         # To tensor + normalize (no undistortion needed — synthetic data)
         tensor1 = self._to_tensor(img1)
         tensor2 = self._to_tensor(img2)
@@ -149,6 +156,34 @@ class TartanAirTrajectory(Dataset):
             "intrinsics": torch.from_numpy(self.K_scaled).float(),    # (3, 3)
             "depth1": torch.from_numpy(depth1).float(),               # (H, W)
         }
+
+    def _augment(self, image: np.ndarray) -> np.ndarray:
+        """Apply random photometric augmentation to a uint8 RGB image.
+
+        Augmentations bridge the domain gap between synthetic TartanAir
+        and real datasets (EuRoC, KITTI) which have motion blur, variable
+        lighting, and sensor noise.
+        """
+        img = image.astype(np.float32)
+
+        # Brightness jitter: ±30
+        if np.random.random() < 0.5:
+            delta = np.random.uniform(-30, 30)
+            img = img + delta
+
+        # Contrast jitter: 0.7-1.3x
+        if np.random.random() < 0.5:
+            factor = np.random.uniform(0.7, 1.3)
+            mean = img.mean()
+            img = (img - mean) * factor + mean
+
+        # Gaussian noise: std 0-10
+        if np.random.random() < 0.5:
+            std = np.random.uniform(0, 10)
+            noise = np.random.normal(0, std, img.shape).astype(np.float32)
+            img = img + noise
+
+        return np.clip(img, 0, 255).astype(np.uint8)
 
     def _to_tensor(self, image: np.ndarray) -> torch.Tensor:
         """HWC uint8 RGB -> CHW float32, ImageNet-normalized."""
@@ -202,6 +237,7 @@ def build_tartanair_dataset(
     target_h: int = 476,
     target_w: int = 742,
     max_pairs: int = 0,
+    augmentation: bool = False,
 ) -> ConcatDataset:
     """Build a combined dataset from all TartanAir trajectories found under data_root.
 
@@ -213,6 +249,7 @@ def build_tartanair_dataset(
         target_h: Target image height.
         target_w: Target image width.
         max_pairs: If > 0, limit total dataset to this many pairs (for quick experiments).
+        augmentation: If True, apply photometric augmentation (color jitter, noise).
 
     Returns:
         ConcatDataset of all valid trajectories.
@@ -242,6 +279,7 @@ def build_tartanair_dataset(
             skip_frames=skip_frames,
             target_h=target_h,
             target_w=target_w,
+            augmentation=augmentation,
         )
         trajectories.append(ds)
         total_pairs += len(ds)

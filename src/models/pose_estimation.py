@@ -169,38 +169,54 @@ class PoseEstimation(nn.Module):
     flow through the SVD and the confidence weights.
     """
 
-    def __init__(self):
+    def __init__(self, coord_normalization: str = "K_inv"):
+        """
+        Args:
+            coord_normalization: How to normalize pixel coords for 8-point.
+                "K_inv" — standard camera coordinates via K^{-1} (textbook).
+                "image" — divide by image dimensions to get [0, 1] (paper Eq. 10).
+        """
         super().__init__()
+        self.coord_normalization = coord_normalization
 
     def _pixel_to_normalized(
         self,
         kp: torch.Tensor,
         K: torch.Tensor,
+        img_h: int = 476,
+        img_w: int = 742,
     ) -> torch.Tensor:
-        """Convert pixel coordinates to normalized camera coordinates.
+        """Convert pixel coordinates to normalized coordinates for 8-point.
 
-        x_norm = K^{-1} @ [u, v, 1]^T
+        Two modes (controlled by self.coord_normalization):
+          "K_inv": x = (u - cx) / fx,  y = (v - cy) / fy  → standard camera coords
+          "image": x = u / (W - 1),    y = v / (H - 1)    → [0, 1] range (paper Eq. 10)
 
         Args:
             kp: (B, M, 2) — pixel coordinates (u, v).
             K:  (B, 3, 3) — camera intrinsic matrix.
+            img_h: Image height (used only in "image" mode).
+            img_w: Image width (used only in "image" mode).
 
         Returns:
             (B, M, 3) — normalized coordinates [x, y, 1].
         """
         B, M, _ = kp.shape
 
-        # Extract intrinsic parameters
-        fx = K[:, 0, 0]  # (B,)
-        fy = K[:, 1, 1]  # (B,)
-        cx = K[:, 0, 2]  # (B,)
-        cy = K[:, 1, 2]  # (B,)
+        if self.coord_normalization == "image":
+            # Paper Eq. 10: x, y ∈ [0, 1]
+            x = kp[..., 0] / (img_w - 1)  # (B, M)
+            y = kp[..., 1] / (img_h - 1)  # (B, M)
+        else:
+            # Standard K^-1 normalization (textbook)
+            fx = K[:, 0, 0]  # (B,)
+            fy = K[:, 1, 1]  # (B,)
+            cx = K[:, 0, 2]  # (B,)
+            cy = K[:, 1, 2]  # (B,)
+            x = (kp[..., 0] - cx.unsqueeze(1)) / fx.unsqueeze(1)  # (B, M)
+            y = (kp[..., 1] - cy.unsqueeze(1)) / fy.unsqueeze(1)  # (B, M)
 
-        # Normalize: x = (u - cx) / fx,  y = (v - cy) / fy
-        x = (kp[..., 0] - cx.unsqueeze(1)) / fx.unsqueeze(1)  # (B, M)
-        y = (kp[..., 1] - cy.unsqueeze(1)) / fy.unsqueeze(1)  # (B, M)
         ones = torch.ones_like(x)
-
         return torch.stack([x, y, ones], dim=-1)  # (B, M, 3)
 
     def _build_epipolar_constraint(
@@ -420,6 +436,8 @@ class PoseEstimation(nn.Module):
         kp2: torch.Tensor,
         weights: torch.Tensor,
         intrinsics: torch.Tensor,
+        img_h: int = 476,
+        img_w: int = 742,
     ) -> dict:
         """Estimate relative pose from weighted correspondences.
 
@@ -428,6 +446,8 @@ class PoseEstimation(nn.Module):
             kp2:        (B, M, 2) — matched keypoint pixel coords in image 2.
             weights:    (B, M)    — per-match confidence weights from Phase 5.
             intrinsics: (B, 3, 3) — camera intrinsic matrix K.
+            img_h:      Image height (for "image" coord normalization mode).
+            img_w:      Image width (for "image" coord normalization mode).
 
         Returns:
             dict with:
@@ -435,9 +455,9 @@ class PoseEstimation(nn.Module):
                 't':         (B, 3)    — estimated unit translation vector
                 'E':         (B, 3, 3) — Essential matrix (raw from 8-point)
         """
-        # Step 1: Pixel -> normalized camera coordinates
-        x1 = self._pixel_to_normalized(kp1, intrinsics)  # (B, M, 3)
-        x2 = self._pixel_to_normalized(kp2, intrinsics)  # (B, M, 3)
+        # Step 1: Pixel -> normalized coordinates
+        x1 = self._pixel_to_normalized(kp1, intrinsics, img_h, img_w)  # (B, M, 3)
+        x2 = self._pixel_to_normalized(kp2, intrinsics, img_h, img_w)  # (B, M, 3)
 
         # Step 2: Build epipolar constraint matrix (Eq. 11)
         Phi = self._build_epipolar_constraint(x1, x2)  # (B, M, 9)

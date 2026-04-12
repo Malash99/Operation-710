@@ -1,0 +1,25 @@
+# Evaluation config for v0.5 models on EuRoC
+# Same as default.yaml but with coord_normalization: image to match v0.5 training
+data:
+  sequence_path: data/euroc/MH_01_easy
+  skip_frames: 2
+  target_h: 476
+  target_w: 742
+  compute_stereo_depth: true
+  min_translation: 0.03
+  max_skip_multiplier: 5
+
+training:
+  coord_normalization: image   # must match v0.5 training
+
+model:
+  top_k: 512
+  descriptor_dim: 192
+  matching_layers: 12
+  reproj_threshold: 5.0
+
+logging:
+  log_interval: 50
+  checkpoint_interval: 1
+  checkpoint_dir: checkpoints_v05_tartanair
+  output_dir: outputs_v05_tartanair

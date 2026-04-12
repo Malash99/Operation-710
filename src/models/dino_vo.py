@@ -114,6 +114,7 @@ class DinoVO(nn.Module):
         descriptor_dim: int = 192,
         matching_layers: int = 12,
         match_threshold: float = 0.1,
+        coord_normalization: str = "K_inv",
     ):
         super().__init__()
 
@@ -124,7 +125,7 @@ class DinoVO(nn.Module):
             num_layers=matching_layers,
             match_threshold=match_threshold,
         )
-        self.pose_est = PoseEstimation()
+        self.pose_est = PoseEstimation(coord_normalization=coord_normalization)
 
     def load_dino(self, device: torch.device) -> None:
         """Load and freeze DINOv2-ViT-S/14. Must be called before training."""
@@ -202,6 +203,7 @@ class DinoVO(nn.Module):
             pose_out = self.pose_est(
                 kp1_matched.float(), kp2_matched.float(),
                 w_matched.float(), intrinsics.float(),
+                img_h=H, img_w=W,
             )
 
         return {

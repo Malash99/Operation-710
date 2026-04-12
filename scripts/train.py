@@ -265,6 +265,7 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
             target_h=cfg["data"]["target_h"],
             target_w=cfg["data"]["target_w"],
             max_pairs=cfg["data"].get("max_pairs", 0),
+            augmentation=cfg["data"].get("augmentation", False),
         )
     else:
         dataset = EuRoCDataset(
@@ -295,6 +296,7 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
         top_k=cfg["model"]["top_k"],
         descriptor_dim=cfg["model"]["descriptor_dim"],
         matching_layers=cfg["model"]["matching_layers"],
+        coord_normalization=cfg["training"].get("coord_normalization", "K_inv"),
     )
     model.load_dino(device)
     model = model.to(device)
@@ -419,10 +421,12 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
                 )
                 # Re-run pose estimation with filtered weights (still differentiable
                 # through inlier weights — RANSAC mask is detached)
+                H_img, W_img = image1.shape[2], image1.shape[3]
                 with torch.amp.autocast("cuda", enabled=False):
                     pose_filtered = model.pose_est(
                         kp1_m.float(), kp2_m.float(),
                         w_filtered.float(), K.float(),
+                        img_h=H_img, img_w=W_img,
                     )
                 R_for_loss = pose_filtered["R"]
                 t_for_loss = pose_filtered["t"]

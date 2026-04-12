@@ -55,6 +55,7 @@ def evaluate_tartanair(
     top_k: int = 512,
     descriptor_dim: int = 192,
     matching_layers: int = 12,
+    coord_normalization: str = "K_inv",
 ):
     """Run full trajectory evaluation on a single TartanAir trajectory."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -83,6 +84,7 @@ def evaluate_tartanair(
         top_k=top_k,
         descriptor_dim=descriptor_dim,
         matching_layers=matching_layers,
+        coord_normalization=coord_normalization,
     )
     model.load_dino(device)
     model = model.to(device)
@@ -240,6 +242,11 @@ def main():
         "--target_w", type=int, default=742,
         help="Target image width"
     )
+    parser.add_argument(
+        "--coord_norm", default="K_inv",
+        choices=["K_inv", "image"],
+        help="Coordinate normalization mode (K_inv or image)"
+    )
     args = parser.parse_args()
 
     evaluate_tartanair(
@@ -249,6 +256,7 @@ def main():
         max_pairs=args.max_pairs,
         target_h=args.target_h,
         target_w=args.target_w,
+        coord_normalization=args.coord_norm,
     )
 
 

@@ -1,0 +1,62 @@
+# DINO-VO v0.5 — [0,1] Coordinate Normalization + Data Augmentation
+#
+# Two fixes based on cross-dataset evaluation (v0.4):
+#
+# Fix 1: Coordinate normalization
+#   Paper Eq. 10 specifies x, y ∈ [0, 1] for the 8-point algorithm.
+#   v0.4 used K^-1 camera coordinates. Changed to divide by image dims.
+#
+# Fix 2: Data augmentation
+#   TartanAir is visually clean (synthetic). EuRoC has motion blur,
+#   variable lighting, aggressive motion. Adding augmentation to
+#   improve domain transfer.
+#
+# Fix 3: No RANSAC
+#   Paper does not use RANSAC. v0.4 evaluation showed RANSAC
+#   did not meaningfully improve results.
+#
+# Fix 4: Full dataset
+#   Using all 34,309 pairs instead of 8,500 subset.
+#
+# Changes from v0.4:
+#   - ransac_filter: false (removed)
+#   - max_pairs: 0 (use all)
+#   - augmentation: true (new)
+#   - coord_normalization: image (new — [0,1] instead of K_inv)
+#   - checkpoint_dir: checkpoints_v05_tartanair
+#   - output_dir: outputs_v05_tartanair
+
+data:
+  dataset: tartanair
+  data_root: data/tartanair
+  skip_frames: 1
+  target_h: 476
+  target_w: 742
+  max_pairs: 0               # CHANGED: use ALL 34,309 pairs (was 8,500)
+  augmentation: true          # NEW: color jitter + gaussian noise
+
+training:
+  epochs: 14
+  batch_size: 6
+  num_workers: 2
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  lambda_p_start_epoch: 5
+  lambda_p_increment: 1.5e-4
+  lambda_p_max: 0.9
+  grad_clip: 1.0
+  use_amp: false
+  ransac_filter: false        # CHANGED: disabled (paper doesn't use it)
+  coord_normalization: image  # NEW: [0,1] normalization (paper Eq. 10)
+
+model:
+  top_k: 512
+  descriptor_dim: 192
+  matching_layers: 12
+  reproj_threshold: 5.0
+
+logging:
+  log_interval: 50
+  checkpoint_interval: 1
+  checkpoint_dir: checkpoints_v05_tartanair
+  output_dir: outputs_v05_tartanair
