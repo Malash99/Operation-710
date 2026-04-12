@@ -703,67 +703,137 @@ confidence weights can't filter.
 
 ---
 
-### 🚧 Phase 12: Break the Chicken-and-Egg Problem (NEXT)
+### ✅ Phase 12: RANSAC Pre-filtering + NED Fix + Evaluation (COMPLETED)
 
-#### Solution Implemented: RANSAC Pre-filtering (v0.4)
+**Date Completed**: April 12, 2026
 
-**Config**: `configs/tartanair_v04.yaml`
-**Checkpoints**: `checkpoints_v04_tartanair/`
+#### Bug 5 — CRITICAL: TartanAir NED-to-Camera Frame Conversion Missing
 
-**How it works**:
-- Epochs 1-4: matching-only (no change from paper)
-- Epochs 5-14: before the weighted 8-point, OpenCV RANSAC identifies inlier
-  matches and zeros out outlier weights. The 8-point then sees only clean
-  matches, producing meaningful pose gradients.
-- RANSAC threshold: 3.0 px
-- RANSAC mask is detached (no gradient through RANSAC itself)
-- Gradient still flows through inlier weights -> matching network
+TartanAir poses are in NED frame (x=forward, y=right, z=down) but our code
+loaded them directly as camera frame (x=right, y=down, z=forward). This caused
+~90° axis permutation in GT poses, making pose loss plateau at ~500.
 
-**Why this should work**:
-- Breaks the chicken-and-egg: good poses -> meaningful pose loss -> ConfMLP
-  learns which matches are inliers vs outliers
-- Diagnostic Test 3b showed: OpenCV RANSAC perfectly handles 20% outliers
-  while our unfiltered 8-point fails with 14.7 deg error
-- The model's matching (loss ~4.0) already produces decent correspondences;
-  they just contain outliers that need filtering
-
-**What to watch for in training output**:
-- `ransac_inliers=N` in log lines (from epoch 5 onward)
-- If N is very low (<20), matches are very bad — may need more pretraining
-- `pose_raw` should DECREASE over epochs (this is the key metric)
-- If pose_raw drops below ~200 by epoch 8, the fix is working
-
-**Run command**:
-```bash
-python -m scripts.train --config configs/tartanair_v04.yaml
+**Fix**: Added conjugation in `src/datasets/tartanair.py:_load_poses()`:
+```python
+T_cam = T_ned2cam @ T_ned @ T_cam2ned
 ```
+where `T_ned2cam = [[0,1,0,0],[0,0,1,0],[1,0,0,0],[0,0,0,1]]`
 
-**After training, evaluate**:
-```bash
-python -m scripts.evaluate --checkpoint checkpoints_v04_tartanair/epoch_13.pth --config configs/default.yaml --max_pairs 200
-```
+**Verified** with depth consistency test (`scripts/verify_ned_frame_v3.py`):
+0.18% median depth error WITH NED conversion vs 7.8% WITHOUT.
 
-**Future enhancements** (after base model works):
-- VIO extension (IMU fusion) — solves scale ambiguity, publishable contribution
-- Architecture improvements for better-than-paper results
-- Multi-dataset evaluation (KITTI, TUM)
-- Phase 2: Remove RANSAC, let learned confidence weights take over
+#### RANSAC Pre-filtering (v0.4)
 
-**Questions pending for paper authors** (see `EMAIL_TO_AUTHORS.md`):
-1. SVD backward approach confirmation (we used DSAC-style clamping)
-2. Essential matrix projection (we removed it)
-3. TartanAir training resolution (we use 476×742, may differ)
-4. Which TartanAir environments they trained on
+- Config: `configs/tartanair_v04.yaml`
+- Checkpoints: `checkpoints_v04_tartanair/` (14 epochs)
+- OpenCV RANSAC zeros outlier weights before 8-point (epochs 5+)
+- RANSAC mask detached — gradient flows through inlier weights only
+
+#### v0.4 Training Results (14 epochs):
+
+| Metric | v0.3 (no NED fix) | v0.4 (NED fix + RANSAC) |
+|--------|-------------------|------------------------|
+| Matching loss (ep 4) | 4.21 | 2.04 |
+| Matching loss (ep 10) | 4.10 | 1.35 |
+| Pose loss (ep 10) | 506.7 | ~230 |
+| NaN/epoch | 30 | ~30 |
+
+NED fix dramatically improved matching (4.0 → 1.35) and reduced pose loss
+(500 → 230), but pose loss plateaued at ~230 — did NOT fully converge.
+
+#### v0.4 Evaluation on EuRoC MH_01 (epoch 11, 200 pairs):
+
+| Metric | v0.4 Result | Paper Target |
+|--------|-------------|-------------|
+| ATE RMSE | 0.615 m | 0.150 m |
+| Rotation Error (mean) | 27.15 deg | ~2-5 deg |
+| Avg matches/pair | 314 | ~512 |
+| Scale factor | 0.036 | — |
+
+#### v0.4 Evaluation on TartanAir carwelding/Easy/P001 (epoch 14, 200 pairs):
+
+| Metric | v0.4 Result | Observation |
+|--------|-------------|-------------|
+| ATE RMSE | 4.940 m | 15% of 33m path length |
+| Rotation Error (mean) | 29.35 deg | Similar to EuRoC |
+| Avg matches/pair | 299 | — |
+| Scale factor | 0.166 | — |
+
+#### Key Findings from Cross-Dataset Evaluation:
+
+1. **TartanAir trajectory shape is roughly correct** — predicted trajectory
+   follows GT shape with systematic drift (visible in plots)
+2. **EuRoC trajectory is chaotic** — random-looking predictions, not drift
+3. Rotation error is ~27-29° on BOTH datasets but failure modes differ:
+   - TartanAir: smooth monotonic drift (model partially learned)
+   - EuRoC: chaotic oscillation (domain gap)
+4. **Two separate problems identified**:
+   - Model-level: systematic translation direction bias (~33° per pair)
+   - Domain gap: synthetic TartanAir → real EuRoC breaks the matcher
+
+#### Diagnostic Scripts Created:
+- `scripts/verify_ned_frame.py` — NED verification attempt 1
+- `scripts/verify_ned_frame_v2.py` — NED verification attempt 2
+- `scripts/verify_ned_frame_v3.py` — **Correct** depth consistency verification
+- `scripts/diagnose_pose_plateau.py` — Per-pair pose breakdown on TartanAir
+- `scripts/evaluate_tartanair.py` — TartanAir trajectory evaluation
+
+#### Evaluation Outputs:
+- `outputs/trajectory_epoch_11.png` — EuRoC trajectory plot (v0.4)
+- `outputs/trajectory_tartanair_P001_epoch_14.png` — TartanAir trajectory plot (v0.4)
+- `outputs/eval_epoch_11.txt` — EuRoC metrics
+- `outputs/eval_tartanair_P001_epoch_14.txt` — TartanAir metrics
+
+---
+
+### 🚧 Phase 13: Coordinate Normalization Fix + Data Augmentation (v0.5)
+
+#### Problem: Two remaining issues identified
+
+1. **Coordinate normalization discrepancy** — Paper Eq. 10 specifies `x, y ∈ [0,1]`
+   for the 8-point algorithm. Our `pose_estimation.py:_pixel_to_normalized()` uses
+   K^-1 camera coordinates instead. This is the only confirmed code discrepancy
+   with the paper that hasn't been fixed.
+
+2. **No data augmentation** — TartanAir is visually clean (synthetic). EuRoC has
+   motion blur, variable lighting, aggressive motion. The matcher overfits to
+   clean synthetic visual properties.
+
+#### Planned Fixes for v0.5:
+1. Change `_pixel_to_normalized()` to use [0,1] normalization (divide by image dimensions)
+2. Add color jitter + gaussian noise augmentation in TartanAir dataloader
+3. Disable RANSAC (paper doesn't use it — and v0.4 proved it didn't help)
+4. Use full dataset (34,309 pairs instead of 8,500)
+5. Retrain from scratch
+
+#### Config: `configs/tartanair_v05.yaml`
+#### Checkpoints: `checkpoints_v05_tartanair/`
+#### Outputs: `outputs_v05_tartanair/`
+
+All v0.4 files are preserved for comparison. Nothing is overwritten.
+
+---
+
+## Version History
+
+| Version | Config | Checkpoints | Key Change | Pose Loss |
+|---------|--------|-------------|------------|-----------|
+| v0.1 | configs/default.yaml | checkpoints/ | EuRoC baseline | ~370 (NaN) |
+| v0.2 | configs/tartanair_v02.yaml | checkpoints_v02_tartanair/ | TartanAir training | ~540 |
+| v0.3 | configs/tartanair_v03.yaml | checkpoints_v03_tartanair/ | 4 bug fixes (SVD, log_rot, etc.) | ~500 |
+| v0.4 | configs/tartanair_v04.yaml | checkpoints_v04_tartanair/ | NED fix + RANSAC | ~230 |
+| v0.5 | configs/tartanair_v05.yaml | checkpoints_v05_tartanair/ | [0,1] coords + augmentation | TBD |
 
 ---
 
 ## Start Command
 
-**For resuming at Phase 11 (foundation verification)**:
-
-"Phase 12 RANSAC fix implemented (v0.4). Run:
-  python -m scripts.train --config configs/tartanair_v04.yaml
-Key metric: pose_raw should DECREASE over epochs 5-14 (was flat at ~500 in v0.3).
-If pose_raw < 200 by epoch 8, the fix works. Evaluate with:
-  python -m scripts.evaluate --checkpoint checkpoints_v04_tartanair/epoch_13.pth --config configs/default.yaml --max_pairs 200
-Full diagnostic report: outputs/DIAGNOSTIC_REPORT_2026-04-04.md"
+"Phase 13 in progress (v0.5). Fixes to apply:
+  1. [0,1] coordinate normalization in pose_estimation.py
+  2. Data augmentation in tartanair.py
+  3. Disable RANSAC, use full dataset
+  Config: configs/tartanair_v05.yaml
+  Previous versions preserved: v0.4 checkpoints in checkpoints_v04_tartanair/
+  Run: python -m scripts.train --config configs/tartanair_v05.yaml
+  Evaluate EuRoC: python -m scripts.evaluate --checkpoint checkpoints_v05_tartanair/epoch_14.pth --config configs/default.yaml --max_pairs 200
+  Evaluate TartanAir: python -m scripts.evaluate_tartanair --checkpoint checkpoints_v05_tartanair/epoch_14.pth --trajectory data/tartanair/carwelding/Easy/P001 --max_pairs 200"

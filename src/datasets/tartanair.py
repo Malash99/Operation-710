@@ -157,14 +157,23 @@ class TartanAirTrajectory(Dataset):
         std = torch.tensor(IMAGENET_STD, dtype=torch.float32).view(3, 1, 1)
         return (tensor - mean) / std
 
-    def _load_poses(self, pose_file: str) -> list:
-        """Load TartanAir poses as 4x4 homogeneous matrices.
+    # NED-to-camera frame conversion (see tartanair_tools/evaluation/trajectory_transform.py)
+    # TartanAir NED: x=forward, y=right, z=down
+    # Camera frame:  x=right,   y=down,  z=forward
+    _T_ned2cam = np.array([[0, 1, 0, 0],
+                            [0, 0, 1, 0],
+                            [1, 0, 0, 0],
+                            [0, 0, 0, 1]], dtype=np.float64)
+    _T_cam2ned = np.linalg.inv(_T_ned2cam)
 
-        Each line: tx ty tz qx qy qz qw
-        TartanAir uses NED frame. Poses represent camera-to-world transforms.
+    def _load_poses(self, pose_file: str) -> list:
+        """Load TartanAir poses as 4x4 homogeneous matrices in camera frame.
+
+        Each line: tx ty tz qx qy qz qw (NED frame)
+        Converted to standard camera frame via T_ned2cam conjugation.
 
         Returns:
-            List of (4, 4) numpy arrays.
+            List of (4, 4) numpy arrays in camera frame.
         """
         poses = []
         with open(pose_file, "r") as f:
@@ -177,10 +186,13 @@ class TartanAirTrajectory(Dataset):
                 qx, qy, qz, qw = values[3], values[4], values[5], values[6]
 
                 R = Rotation.from_quat([qx, qy, qz, qw]).as_matrix()
-                T = np.eye(4, dtype=np.float64)
-                T[:3, :3] = R
-                T[:3, 3] = [tx, ty, tz]
-                poses.append(T)
+                T_ned = np.eye(4, dtype=np.float64)
+                T_ned[:3, :3] = R
+                T_ned[:3, 3] = [tx, ty, tz]
+
+                # Convert from NED frame to camera frame
+                T_cam = self._T_ned2cam @ T_ned @ self._T_cam2ned
+                poses.append(T_cam)
         return poses
 
 

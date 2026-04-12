@@ -34,7 +34,16 @@
       "WebFetch(domain:tartanair.org)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(python -m scripts.evaluate --checkpoint checkpoints_v03_tartanair/epoch_13.pth --config configs/default.yaml --max_pairs 200)",
-      "Bash(python -m scripts.diagnostic_tests)"
+      "Bash(python -m scripts.diagnostic_tests)",
+      "Bash(python -c ':*)",
+      "Bash(python -c \"import scripts.train; print\\('Import OK'\\)\")",
+      "Bash(python -m scripts.train --config configs/tartanair_v04.yaml --max_steps 2)",
+      "Bash(head -50 tartanair_tools/*.py)",
+      "Bash(awk '/def _compute_relative_pose/,/^    def / {print NR\": \"$0}' ./src/datasets/euroc.py)",
+      "Bash(python scripts/verify_ned_frame.py)",
+      "Bash(python scripts/verify_ned_frame_v2.py)",
+      "Bash(python scripts/verify_ned_frame_v3.py)",
+      "Bash(pip show:*)"
     ]
   }
 }

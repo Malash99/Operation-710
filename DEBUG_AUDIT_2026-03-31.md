@@ -196,3 +196,69 @@ This is the #1 priority before any further work.
 2. Pose loss sanity check → L(R_gt, R_gt) must be 0
 3. Compare with OpenCV findEssentialMat on same matches
 4. Gradient magnitude check through full pose pipeline
+
+---
+
+## BUG #5 (2026-04-10): TartanAir NED-to-Camera Frame Conversion Missing
+
+**File**: `src/datasets/tartanair.py`, function `_load_poses`
+
+TartanAir camera motion is defined in the NED (North-East-Down) frame:
+- NED: x=forward, y=right, z=down
+- Camera: x=right, y=down, z=forward
+
+Our dataloader loaded poses directly WITHOUT converting from NED to camera frame.
+This caused a ~90° axis permutation in all GT poses, making every GT relative
+pose fundamentally wrong. The matching loss still converged because GT correspondences
+were generated from the SAME wrong poses (errors cancelled in reprojection), but
+the pose loss target was garbage.
+
+**Verification**: `scripts/verify_ned_frame_v3.py` — cross-frame depth consistency:
+- Without NED conversion: 7.8% median relative depth error
+- With NED conversion: 0.18% median relative depth error (100x better)
+
+**Fix applied**: Conjugation `T_cam = T_ned2cam @ T_ned @ T_cam2ned` in `_load_poses()`.
+The conversion matrix `T_ned2cam = [[0,1,0,0],[0,0,1,0],[1,0,0,0],[0,0,0,1]]` was
+confirmed from `tartanair_tools/evaluation/trajectory_transform.py`.
+
+**Impact**: Pose loss dropped from ~500 to ~230. Matching loss improved from 4.0 to 1.35.
+However, pose loss plateaued at ~230 — NED fix was necessary but NOT sufficient.
+
+---
+
+## Remaining Issue: Coordinate Normalization (2026-04-10)
+
+**File**: `src/models/pose_estimation.py`, function `_pixel_to_normalized`
+
+The paper (Eq. 10) specifies `x, y ∈ [0, 1]` — coordinates normalized by dividing
+by image dimensions. Our code uses K^-1 camera coordinates (standard textbook approach
+but different from what the paper describes).
+
+**Status**: Confirmed discrepancy, not yet fixed. Will be applied in v0.5.
+
+---
+
+## Cross-Dataset Evaluation Summary (2026-04-11)
+
+After NED fix + RANSAC training (v0.4), evaluated on both datasets:
+
+| Dataset | ATE RMSE | Rotation Mean | Failure Mode |
+|---------|----------|---------------|-------------|
+| EuRoC MH_01 (200 pairs) | 0.615 m | 27.15° | Chaotic predictions |
+| TartanAir carwelding/P001 (200 pairs) | 4.940 m | 29.35° | Smooth drift |
+
+**Key insight**: TartanAir shows the model IS learning (trajectory shape is recognizable,
+drift is smooth/monotonic). EuRoC shows chaotic breakdown (domain gap from synthetic
+to real images). Two separate problems require two fixes:
+1. Translation direction bias → [0,1] coordinate normalization
+2. Domain gap → data augmentation during training
+
+---
+
+## What We Will Do Next (v0.5)
+
+1. Apply [0,1] coordinate normalization in `pose_estimation.py`
+2. Add color jitter + gaussian noise augmentation in `tartanair.py`
+3. Disable RANSAC (paper doesn't use it, v0.4 proved no benefit)
+4. Use full dataset (34,309 pairs vs 8,500)
+5. Retrain from scratch as v0.5 — all v0.4 files preserved
