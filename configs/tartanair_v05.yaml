@@ -32,7 +32,7 @@ data:
   skip_frames: 1
   target_h: 476
   target_w: 742
-  max_pairs: 0               # CHANGED: use ALL 34,309 pairs (was 8,500)
+  max_pairs: 8500             # Same as v0.3/v0.4 for fair comparison
   augmentation: true          # NEW: color jitter + gaussian noise
 
 training:

@@ -32,6 +32,7 @@ Equation 14 -- Total Loss:
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from typing import List, Optional
 
 
@@ -241,6 +242,120 @@ class PoseLoss(nn.Module):
         loss = self.lambda_r * rot_err + self.lambda_t * trans_err
 
         return loss.mean()
+
+
+class InlierLoss(nn.Module):
+    """Inlier classification loss for confidence pretraining.
+
+    Trains the ConfMLP to predict whether each predicted match is a geometric
+    inlier, using depth-based reprojection as ground truth labels.
+
+    This breaks the chicken-and-egg problem: the ConfMLP gets a direct training
+    signal from epoch 1, without going through the 8-point algorithm.
+
+    For each predicted match (p1 in image 1, p2 in image 2):
+      1. Back-project p1 to 3D using depth
+      2. Transform to camera 2 using GT pose
+      3. Project to image 2
+      4. If reprojection error < threshold -> inlier (label = 1)
+      5. BCE(confidence_weight, inlier_label)
+
+    Args:
+        reproj_threshold: Max pixel error to consider a match an inlier (default 5.0).
+    """
+
+    def __init__(self, reproj_threshold: float = 5.0):
+        super().__init__()
+        self.reproj_threshold = reproj_threshold
+
+    def forward(
+        self,
+        kp1: torch.Tensor,
+        kp2: torch.Tensor,
+        matches_list: list,
+        weights_list: list,
+        depth1: torch.Tensor,
+        intrinsics: torch.Tensor,
+        T_gt: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Args:
+            kp1:           (B, K, 2) detected keypoints in image 1.
+            kp2:           (B, K, 2) detected keypoints in image 2.
+            matches_list:  list of B tensors, each (M_b, 2) match indices.
+            weights_list:  list of B tensors, each (M_b,) confidence weights [0,1].
+            depth1:        (B, H, W) depth map for image 1.
+            intrinsics:    (B, 3, 3) camera intrinsics K.
+            T_gt:          (B, 4, 4) GT relative pose.
+
+        Returns:
+            Scalar BCE loss averaged over all matches across the batch.
+        """
+        B = kp1.shape[0]
+        H, W = depth1.shape[1], depth1.shape[2]
+        device = kp1.device
+
+        K_inv = torch.linalg.inv(intrinsics)  # (B, 3, 3)
+        R_gt = T_gt[:, :3, :3]  # (B, 3, 3)
+        t_gt = T_gt[:, :3, 3]   # (B, 3)
+
+        losses = []
+
+        for b in range(B):
+            matches = matches_list[b]  # (M_b, 2)
+            weights = weights_list[b]  # (M_b,)
+            M = matches.shape[0]
+
+            if M == 0:
+                continue
+
+            # Get matched keypoint pixel coordinates
+            idx1 = matches[:, 0].long()
+            idx2 = matches[:, 1].long()
+            pts1 = kp1[b, idx1]  # (M, 2) x, y
+            pts2 = kp2[b, idx2]  # (M, 2) x, y
+
+            # Sample depth at pts1 locations (nearest neighbor)
+            u = pts1[:, 0].round().long().clamp(0, W - 1)
+            v = pts1[:, 1].round().long().clamp(0, H - 1)
+            d = depth1[b, v, u]  # (M,)
+
+            # Back-project to 3D: P = d * K_inv @ [x, y, 1]^T
+            ones = torch.ones(M, 1, device=device, dtype=pts1.dtype)
+            uv_h = torch.cat([pts1, ones], dim=-1)  # (M, 3)
+            rays = (K_inv[b] @ uv_h.T).T            # (M, 3)
+            p3d = rays * d.unsqueeze(-1)             # (M, 3)
+
+            # Transform to camera 2: P' = R @ P + t
+            p3d_cam2 = (R_gt[b] @ p3d.T).T + t_gt[b].unsqueeze(0)  # (M, 3)
+
+            # Project to image 2: uv = K @ P' / z
+            proj = (intrinsics[b] @ p3d_cam2.T).T  # (M, 3)
+            z = proj[:, 2:3].clamp(min=1e-6)
+            proj_uv = proj[:, :2] / z  # (M, 2)
+
+            # Reprojection error
+            reproj_err = (proj_uv - pts2).norm(dim=-1)  # (M,)
+
+            # Inlier labels (detached -- no gradient through labels)
+            inlier = (
+                (reproj_err < self.reproj_threshold)
+                & (d > 0)
+                & (p3d_cam2[:, 2] > 0)
+            ).float()  # (M,)
+
+            # BCE: confidence weight (differentiable) vs inlier label (detached)
+            loss_b = F.binary_cross_entropy(
+                weights.clamp(1e-6, 1.0 - 1e-6),
+                inlier.detach(),
+                reduction="mean",
+            )
+            losses.append(loss_b)
+
+        if len(losses) == 0:
+            return torch.tensor(0.0, device=device, requires_grad=True)
+
+        return torch.stack(losses).mean()
 
 
 class DinoVOLoss(nn.Module):

@@ -1,0 +1,24 @@
+DINO-VO TartanAir Evaluation Results
+==================================================
+Checkpoint: checkpoints_v06_tartanair/epoch_14.pth
+Epoch: 14
+Trajectory: data/tartanair/carwelding/Easy/P001
+Pairs evaluated: 200
+Skip frames: 1 (consecutive)
+Inference time: 103.5s (1.9 pairs/sec)
+Avg matches per pair: 304
+
+Scale factor: 0.1658
+GT path length: 33.162 m
+Pred path length (unscaled): 200.000 m
+Pred path length (scaled): 33.162 m
+
+ATE RMSE:   4.6826 m
+ATE Mean:   3.9079 m
+ATE Median: 4.4763 m
+ATE Std:    2.5797 m
+ATE Max:    7.9219 m
+
+Rotation Mean:   20.87 deg
+Rotation Median: 21.81 deg
+Rotation Max:    32.83 deg

@@ -786,31 +786,130 @@ NED fix dramatically improved matching (4.0 → 1.35) and reduced pose loss
 
 ---
 
-### 🚧 Phase 13: Coordinate Normalization Fix + Data Augmentation (v0.5)
+### ❌ Phase 13: Coordinate Normalization Fix + Data Augmentation (v0.5) — FAILED
 
-#### Problem: Two remaining issues identified
+#### Changes Applied:
+1. [0,1] coordinate normalization in `pose_estimation.py` (paper Eq. 10)
+2. Data augmentation in TartanAir dataloader (color jitter, gaussian noise)
+3. Disabled RANSAC (paper doesn't use it)
+4. Trained on 8,500 pairs (same as v0.4 for fair comparison)
 
-1. **Coordinate normalization discrepancy** — Paper Eq. 10 specifies `x, y ∈ [0,1]`
-   for the 8-point algorithm. Our `pose_estimation.py:_pixel_to_normalized()` uses
-   K^-1 camera coordinates instead. This is the only confirmed code discrepancy
-   with the paper that hasn't been fixed.
+#### v0.5 Training Results (7 epochs completed):
 
-2. **No data augmentation** — TartanAir is visually clean (synthetic). EuRoC has
-   motion blur, variable lighting, aggressive motion. The matcher overfits to
-   clean synthetic visual properties.
+| Metric | v0.4 (ep 5-10) | v0.5 (ep 5-7) | Verdict |
+|--------|---------------|---------------|---------|
+| Matching loss | 1.81 → 1.35 | 1.88 → 1.83 | v0.5 worse |
+| Pose loss (raw) | ~230 (flat) | ~390 (flat) | v0.5 much worse |
 
-#### Planned Fixes for v0.5:
-1. Change `_pixel_to_normalized()` to use [0,1] normalization (divide by image dimensions)
-2. Add color jitter + gaussian noise augmentation in TartanAir dataloader
-3. Disable RANSAC (paper doesn't use it — and v0.4 proved it didn't help)
-4. Use full dataset (34,309 pairs instead of 8,500)
-5. Retrain from scratch
+#### Why v0.5 Failed:
+- **[0,1] normalization is worse than K_inv**: Discards camera calibration info
+  (focal length, principal point). K_inv gives geometrically meaningful coordinates.
+- **Removing RANSAC premature**: Without trained ConfMLP, outliers corrupt 8-point.
+- **Augmentation is useful**: Kept for v0.6 (helps domain gap).
 
 #### Config: `configs/tartanair_v05.yaml`
-#### Checkpoints: `checkpoints_v05_tartanair/`
-#### Outputs: `outputs_v05_tartanair/`
+#### Checkpoints: `checkpoints_v05_tartanair/` (7 epochs)
 
-All v0.4 files are preserved for comparison. Nothing is overwritten.
+---
+
+### ❌ Phase 14: Confidence Pretraining via Inlier Loss (v0.6) — FAILED
+
+#### Changes from v0.4:
+- `inlier_loss: true`, `lambda_inlier: 0.5`, `reproj_threshold: 5.0px`
+- `augmentation: true`, `coord_normalization: K_inv`, `ransac_filter: true`
+
+#### Config: `configs/tartanair_v06.yaml`
+#### Checkpoints: `checkpoints_v06_tartanair/` (14 epochs)
+#### Outputs: `outputs_v06_tartanair/`
+
+#### v0.6 Results (14 epochs):
+| Metric | v0.6 Result | Target |
+|--------|-------------|--------|
+| Matching loss (ep 14) | ~2.4 | — |
+| Pose loss (raw) | 100–600 oscillation | < 150 |
+| Avg InlierLoss BCE | 0.629 → 0.571 | < 0.3 |
+| EuRoC ATE RMSE | 0.585 m | 0.150 m |
+| TartanAir ATE RMSE | 4.683 m | — |
+| Rotation error (mean) | ~20° | ~2–5° |
+
+#### Why v0.6 Failed — diagnosed via `scripts/test_gt_weights_pose.py`:
+
+**GT-weights test (2026-04-17)** — fed depth-reprojection ground-truth inlier labels
+directly into our 8-point on 50 real TartanAir pairs (v0.6 epoch 14 checkpoint):
+
+| Scheme | Rotation (median) | Translation dir (median) |
+|--------|-------------------|--------------------------|
+| (A) Model ConfMLP weights | 0.38° | 22.97° |
+| (B) GT binary weights (1/0) | 0.13° | 8.52° |
+| (C) Inliers only (outliers dropped) | 0.13° | **8.52°** |
+
+**Key findings:**
+1. **8-point math is CORRECT** — with perfect inliers: 0.13° rotation, 8.5° translation
+2. **ConfMLP barely discriminates** — mean weight on inliers: 0.93, on outliers: 0.64 → **1.44× ratio** (target: ≥5×)
+3. **Root cause of weak learning:** `lambda_inlier=0.5` too weak + `reproj_threshold=5.0px` too loose
+   - 5px gives ~70% "inliers" → class imbalance → BCE near entropy → near-zero gradient
+   - matching loss dominated over inlier loss at 0.5 weight
+
+**The 8.5° translation floor is a real mathematical property** of 8-point on small-baseline
+forward-dominant motion (TartanAir carwelding). Not a bug. Paper handles this via training
+over many pairs, not by making single-pair estimates perfect.
+
+**Emails sent to authors** (2026-04-17):
+- mbazhari@kaist.ac.kr, hcshim@kaist.ac.kr — asking for training details / ConfMLP pretraining
+- IEEE RA-L editorial (ral-eic@ieee.org) — reproducibility concern notification
+
+---
+
+### 🚧 Phase 15: Staged Curriculum Training (v0.7 Stage 1 — IN PROGRESS)
+
+**Date Started**: April 17, 2026
+
+#### Strategy: Two-Stage Curriculum
+
+**Stage 1 (v0.7) — ConfMLP pretraining only, no pose loss:**
+- Fix the two root causes of weak InlierLoss: too-weak weight + too-loose threshold
+- Train 10 epochs, monitor discrimination ratio each epoch
+- Stopping criterion: ratio ≥ 5× → proceed to Stage 2
+
+**Stage 2 (v0.8, planned) — Load Stage 1 checkpoint, add pose loss:**
+- ConfMLP already discriminates inliers → 8-point gets useful weights → pose converges
+
+#### v0.7 Changes from v0.6:
+- `lambda_inlier: 3.0` (was 0.5) — now dominates matching loss
+- `inlier_reproj_threshold: 2.0px` (new config key) — balanced 50/50 inlier split
+- `lambda_p_max: 0.0` + `lambda_p_start_epoch: 999` — pose loss disabled entirely
+- `epochs: 10`
+
+#### train.py changes (2026-04-17):
+- `inlier_reproj_threshold` config key read separately from `reproj_threshold`
+  (so BCE labels use 2px threshold while GT correspondence generation keeps 5px)
+- Per-epoch `_log_confmlp_discrimination()` reports inlier/outlier weight ratio
+
+#### Config: `configs/tartanair_v07.yaml`
+#### Checkpoints: `checkpoints_v07_tartanair/`
+#### Outputs: `outputs_v07_tartanair/`
+
+#### New diagnostic script:
+- `scripts/test_gt_weights_pose.py` — feeds GT-derived binary weights into our own
+  8-point to isolate whether pose layer or ConfMLP is the bottleneck.
+  Usage: `python -m scripts.test_gt_weights_pose --checkpoint <ckpt> --trajectory <path> --n_pairs 50 --reproj_thresh 2.0`
+
+#### Monitoring per epoch — watch for:
+```
+ConfMLP discrimination: inlier=X.XXX  outlier=X.XXX  ratio=X.XXx  [status]
+```
+- `ratio ~1.4×` → still not learning (same as v0.6)
+- `ratio ~2.5×` → improving
+- `ratio ≥5.0×` → Stage 1 complete, proceed to Stage 2
+
+#### After Stage 1 completes — run verdict test:
+```
+python -m scripts.test_gt_weights_pose \
+    --checkpoint checkpoints_v07_tartanair/epoch_10.pth \
+    --trajectory data/tartanair/carwelding/Easy/P001 \
+    --n_pairs 50 --reproj_thresh 2.0
+```
+If inlier/outlier ratio ≥ 5× → write `configs/tartanair_v08.yaml` and resume with pose loss.
 
 ---
 
@@ -822,18 +921,32 @@ All v0.4 files are preserved for comparison. Nothing is overwritten.
 | v0.2 | configs/tartanair_v02.yaml | checkpoints_v02_tartanair/ | TartanAir training | ~540 |
 | v0.3 | configs/tartanair_v03.yaml | checkpoints_v03_tartanair/ | 4 bug fixes (SVD, log_rot, etc.) | ~500 |
 | v0.4 | configs/tartanair_v04.yaml | checkpoints_v04_tartanair/ | NED fix + RANSAC | ~230 |
-| v0.5 | configs/tartanair_v05.yaml | checkpoints_v05_tartanair/ | [0,1] coords + augmentation | TBD |
+| v0.5 | configs/tartanair_v05.yaml | checkpoints_v05_tartanair/ | [0,1] coords + augment (FAILED) | ~390 |
+| v0.6 | configs/tartanair_v06.yaml | checkpoints_v06_tartanair/ | Inlier pretraining (lambda=0.5, 5px) | 100–600 oscillation (FAILED) |
+| v0.7 | configs/tartanair_v07.yaml | checkpoints_v07_tartanair/ | Stage 1: stronger inlier (lambda=3.0, 2px), no pose | IN PROGRESS |
 
 ---
 
 ## Start Command
 
-"Phase 13 in progress (v0.5). Fixes to apply:
-  1. [0,1] coordinate normalization in pose_estimation.py
-  2. Data augmentation in tartanair.py
-  3. Disable RANSAC, use full dataset
-  Config: configs/tartanair_v05.yaml
-  Previous versions preserved: v0.4 checkpoints in checkpoints_v04_tartanair/
-  Run: python -m scripts.train --config configs/tartanair_v05.yaml
-  Evaluate EuRoC: python -m scripts.evaluate --checkpoint checkpoints_v05_tartanair/epoch_14.pth --config configs/default.yaml --max_pairs 200
-  Evaluate TartanAir: python -m scripts.evaluate_tartanair --checkpoint checkpoints_v05_tartanair/epoch_14.pth --trajectory data/tartanair/carwelding/Easy/P001 --max_pairs 200"
+"Phase 15 in progress (v0.7 Stage 1). Stronger ConfMLP pretraining, pose loss disabled.
+  v0.6 post-mortem: InlierLoss lambda=0.5 + 5px threshold too weak — ConfMLP only 1.44x discrimination after 14 epochs.
+  GT-weights test PROVED: 8-point math is correct (0.13 deg rotation with perfect inliers). Bottleneck is ConfMLP.
+  v0.7 fix: lambda_inlier=3.0, inlier_reproj_threshold=2.0px, pose loss disabled (lambda_p_max=0.0).
+  
+  Training is CURRENTLY RUNNING (started 2026-04-17):
+    python -m scripts.train --config configs/tartanair_v07.yaml
+  
+  Monitor each epoch for:
+    ConfMLP discrimination: inlier=X.XXX  outlier=X.XXX  ratio=X.XXx  [status]
+    Target: ratio >= 5.0x to proceed to Stage 2.
+  
+  After Stage 1 done — run verdict test:
+    python -m scripts.test_gt_weights_pose --checkpoint checkpoints_v07_tartanair/epoch_10.pth --trajectory data/tartanair/carwelding/Easy/P001 --n_pairs 50 --reproj_thresh 2.0
+  
+  If ratio >= 5x: write configs/tartanair_v08.yaml — load v07 checkpoint, re-enable pose loss (lambda_p_max=0.9).
+  If ratio still ~1.5x: ConfMLP architecture or data needs investigation before continuing.
+  
+  Emails sent to paper authors (mbazhari@kaist.ac.kr, hcshim@kaist.ac.kr) and journal (ral-eic@ieee.org) 2026-04-17.
+  Key diagnostic script: scripts/test_gt_weights_pose.py
+  Documentation: docs/ARCHITECTURE_EXPLAINED.md"

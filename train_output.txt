@@ -412,3 +412,310 @@ Epoch 11/14:  59%|███▌  | 829/1417 [54:05<50:36,  5.16s/it, loss=206.349
 Epoch 11/14:  62%|███▋  | 879/1417 [58:17<44:06,  4.92s/it, loss=260.8958, match=1.0831, pose=289.76, lp=0.9000, nan=0]  Step 15050 | total=260.8958 match=1.0831 pose_raw=289.76 lp=0.9000 | gt_matches=1536 nan_skipped=0 ransac_inliers=294
 Epoch 11/14:  66%|██▌ | 929/1417 [1:02:09<37:03,  4.56s/it, loss=167.0625, match=1.2483, pose=185.49, lp=0.9000, nan=0]  Step 15100 | total=167.0625 match=1.2483 pose_raw=185.49 lp=0.9000 | gt_matches=1820 nan_skipped=0 ransac_inliers=364
 Epoch 11/14:  68%|██▋ | 968/1417 [1:04:59<28:36,  3.82s/it, loss=165.5835, match=1.3014, pose=183.84, lp=0.9000, nan=0]
+
+
+
+
+
+
+
+
+trial after changes 
+\Easy\P001: 976 frames, 975 pairs
+  carwelding\Easy\P002: 1314 frames, 1313 pairs
+  carwelding\Easy\P004: 392 frames, 391 pairs
+  carwelding\Easy\P005: 429 frames, 428 pairs
+  carwelding\Easy\P006: 304 frames, 303 pairs
+  carwelding\Easy\P007: 357 frames, 356 pairs
+  japanesealley\Easy\P001: 1058 frames, 1057 pairs
+  japanesealley\Easy\P002: 653 frames, 652 pairs
+  japanesealley\Easy\P003: 840 frames, 839 pairs
+  japanesealley\Easy\P004: 777 frames, 776 pairs
+  japanesealley\Easy\P005: 579 frames, 578 pairs
+  japanesealley\Easy\P007: 510 frames, 509 pairs
+  ocean\Easy\P000: 1316 frames, 1315 pairs
+  ocean\Easy\P001: 480 frames, 479 pairs
+  ocean\Easy\P002: 526 frames, 525 pairs
+  ocean\Easy\P004: 1111 frames, 1110 pairs
+  ocean\Easy\P005: 440 frames, 439 pairs
+  ocean\Easy\P006: 318 frames, 317 pairs
+  ocean\Easy\P008: 1216 frames, 1215 pairs
+  ocean\Easy\P009: 373 frames, 372 pairs
+  ocean\Easy\P010: 306 frames, 305 pairs
+  ocean\Easy\P011: 553 frames, 552 pairs
+  ocean\Easy\P012: 523 frames, 522 pairs
+  ocean\Easy\P013: 595 frames, 594 pairs
+  office2\Easy\P000: 378 frames, 377 pairs
+  office2\Easy\P003: 612 frames, 611 pairs
+  office2\Easy\P004: 1698 frames, 1697 pairs
+  office2\Easy\P005: 542 frames, 541 pairs
+  office2\Easy\P006: 916 frames, 915 pairs
+  office2\Easy\P007: 310 frames, 309 pairs
+  office2\Easy\P008: 1471 frames, 1470 pairs
+  office2\Easy\P009: 1594 frames, 1593 pairs
+  office2\Easy\P010: 304 frames, 303 pairs
+  office2\Easy\P011: 709 frames, 708 pairs
+  office\Easy\P000: 1419 frames, 1418 pairs
+  office\Easy\P001: 1395 frames, 1394 pairs
+  office\Easy\P002: 1624 frames, 1623 pairs
+  office\Easy\P003: 1823 frames, 1822 pairs
+  office\Easy\P004: 1582 frames, 1581 pairs
+  office\Easy\P005: 959 frames, 958 pairs
+  office\Easy\P006: 1068 frames, 1067 pairs
+
+  Total: 41 trajectories, 34309 pairs
+  Limited to 8500 pairs (max_pairs=8500)
+  Dataset pairs: 8500
+  Steps per epoch: 1417
+
+Building model...
+Loading DINOv2-ViT-S/14 from torch.hub...
+Using cache found in C:\Users\PC/.cache\torch\hub\facebookresearch_dinov2_main
+C:\Users\PC/.cache\torch\hub\facebookresearch_dinov2_main\dinov2\layers\swiglu_ffn.py:51: UserWarning: xFormers is not available (SwiGLU)
+  warnings.warn("xFormers is not available (SwiGLU)")
+C:\Users\PC/.cache\torch\hub\facebookresearch_dinov2_main\dinov2\layers\attention.py:33: UserWarning: xFormers is not available (Attention)
+  warnings.warn("xFormers is not available (Attention)")
+C:\Users\PC/.cache\torch\hub\facebookresearch_dinov2_main\dinov2\layers\block.py:40: UserWarning: xFormers is not available (Block)
+  warnings.warn("xFormers is not available (Block)")
+DINOv2-ViT-S/14 loaded and frozen. Parameters: 22,056,576
+  Trainable parameters: 6,195,522
+
+Starting training from epoch 1 to 14...
+Epoch 01/14:   3%|▏      | 49/1417 [8:57:30<1:06:24,  2.91s/it, loss=5.7543, match=5.7543, pose=0.00, lp=0.0000, nan=0]  Step 50 | total=5.7543 match=5.7543 pose_raw=0.00 lp=0.0000 | gt_matches=1617 nan_skipped=0
+Epoch 01/14:   7%|▍      | 99/1417 [8:59:54<1:05:27,  2.98s/it, loss=5.3991, match=5.3991, pose=0.00, lp=0.0000, nan=0]  Step 100 | total=5.3991 match=5.3991 pose_raw=0.00 lp=0.0000 | gt_matches=1575 nan_skipped=0
+Epoch 01/14:  11%|▊       | 149/1417 [9:02:16<59:14,  2.80s/it, loss=4.7535, match=4.7535, pose=0.00, lp=0.0000, nan=0]  Step 150 | total=4.7535 match=4.7535 pose_raw=0.00 lp=0.0000 | gt_matches=1406 nan_skipped=0
+Epoch 01/14:  14%|█       | 199/1417 [9:04:36<55:06,  2.71s/it, loss=3.8510, match=3.8510, pose=0.00, lp=0.0000, nan=0]  Step 200 | total=3.8510 match=3.8510 pose_raw=0.00 lp=0.0000 | gt_matches=1584 nan_skipped=0
+Epoch 01/14:  18%|█▍      | 249/1417 [9:06:56<58:08,  2.99s/it, loss=3.8798, match=3.8798, pose=0.00, lp=0.0000, nan=0]  Step 250 | total=3.8798 match=3.8798 pose_raw=0.00 lp=0.0000 | gt_matches=1625 nan_skipped=0
+Epoch 01/14:  21%|█▎    | 299/1417 [9:09:55<1:22:28,  4.43s/it, loss=3.4490, match=3.4490, pose=0.00, lp=0.0000, nan=0]  Step 300 | total=3.4490 match=3.4490 pose_raw=0.00 lp=0.0000 | gt_matches=1631 nan_skipped=0
+Epoch 01/14:  25%|█▍    | 349/1417 [9:13:31<1:19:07,  4.44s/it, loss=3.6813, match=3.6813, pose=0.00, lp=0.0000, nan=0]  Step 350 | total=3.6813 match=3.6813 pose_raw=0.00 lp=0.0000 | gt_matches=1556 nan_skipped=0
+Epoch 01/14:  28%|█▋    | 399/1417 [9:17:42<1:24:26,  4.98s/it, loss=3.8972, match=3.8972, pose=0.00, lp=0.0000, nan=0]  Step 400 | total=3.8972 match=3.8972 pose_raw=0.00 lp=0.0000 | gt_matches=1642 nan_skipped=0
+Epoch 01/14:  32%|█▉    | 449/1417 [9:21:54<1:20:59,  5.02s/it, loss=3.5664, match=3.5664, pose=0.00, lp=0.0000, nan=0]  Step 450 | total=3.5664 match=3.5664 pose_raw=0.00 lp=0.0000 | gt_matches=1571 nan_skipped=0
+Epoch 01/14:  35%|██    | 499/1417 [9:26:04<1:15:42,  4.95s/it, loss=3.2400, match=3.2400, pose=0.00, lp=0.0000, nan=0]  Step 500 | total=3.2400 match=3.2400 pose_raw=0.00 lp=0.0000 | gt_matches=1610 nan_skipped=0
+Epoch 01/14:  39%|██▎   | 549/1417 [9:30:15<1:13:31,  5.08s/it, loss=3.3850, match=3.3850, pose=0.00, lp=0.0000, nan=0]  Step 550 | total=3.3850 match=3.3850 pose_raw=0.00 lp=0.0000 | gt_matches=1675 nan_skipped=0
+Epoch 01/14:  42%|██▌   | 599/1417 [9:34:19<1:00:12,  4.42s/it, loss=3.6213, match=3.6213, pose=0.00, lp=0.0000, nan=0]  Step 600 | total=3.6213 match=3.6213 pose_raw=0.00 lp=0.0000 | gt_matches=1488 nan_skipped=0
+Epoch 01/14:  46%|███▋    | 649/1417 [9:37:39<50:12,  3.92s/it, loss=3.1952, match=3.1952, pose=0.00, lp=0.0000, nan=0]  Step 650 | total=3.1952 match=3.1952 pose_raw=0.00 lp=0.0000 | gt_matches=1656 nan_skipped=0
+Epoch 01/14:  49%|███▉    | 699/1417 [9:40:52<45:25,  3.80s/it, loss=3.5061, match=3.5061, pose=0.00, lp=0.0000, nan=0]  Step 700 | total=3.5061 match=3.5061 pose_raw=0.00 lp=0.0000 | gt_matches=1708 nan_skipped=0
+Epoch 01/14:  53%|████▏   | 749/1417 [9:44:02<42:47,  3.84s/it, loss=3.1777, match=3.1777, pose=0.00, lp=0.0000, nan=0]  Step 750 | total=3.1777 match=3.1777 pose_raw=0.00 lp=0.0000 | gt_matches=1598 nan_skipped=0
+Epoch 01/14:  56%|████▌   | 799/1417 [9:47:13<39:33,  3.84s/it, loss=3.7058, match=3.7058, pose=0.00, lp=0.0000, nan=0]  Step 800 | total=3.7058 match=3.7058 pose_raw=0.00 lp=0.0000 | gt_matches=1450 nan_skipped=0
+Epoch 01/14:  60%|████▊   | 849/1417 [9:50:25<36:50,  3.89s/it, loss=2.7987, match=2.7987, pose=0.00, lp=0.0000, nan=0]  Step 850 | total=2.7987 match=2.7987 pose_raw=0.00 lp=0.0000 | gt_matches=1599 nan_skipped=0
+Epoch 01/14:  63%|█████   | 899/1417 [9:53:15<26:44,  3.10s/it, loss=3.1145, match=3.1145, pose=0.00, lp=0.0000, nan=0]  Step 900 | total=3.1145 match=3.1145 pose_raw=0.00 lp=0.0000 | gt_matches=1522 nan_skipped=0
+Epoch 01/14:  67%|█████▎  | 949/1417 [9:56:04<29:34,  3.79s/it, loss=2.8927, match=2.8927, pose=0.00, lp=0.0000, nan=0]  Step 950 | total=2.8927 match=2.8927 pose_raw=0.00 lp=0.0000 | gt_matches=1691 nan_skipped=0
+Epoch 01/14:  71%|█████▋  | 999/1417 [9:59:01<24:13,  3.48s/it, loss=3.6163, match=3.6163, pose=0.00, lp=0.0000, nan=0]  Step 1000 | total=3.6163 match=3.6163 pose_raw=0.00 lp=0.0000 | gt_matches=1488 nan_skipped=0
+Epoch 01/14:  74%|████▍ | 1049/1417 [10:02:05<24:04,  3.93s/it, loss=3.0418, match=3.0418, pose=0.00, lp=0.0000, nan=0]  Step 1050 | total=3.0418 match=3.0418 pose_raw=0.00 lp=0.0000 | gt_matches=1624 nan_skipped=0
+Epoch 01/14:  78%|████▋ | 1099/1417 [10:05:21<20:17,  3.83s/it, loss=3.3750, match=3.3750, pose=0.00, lp=0.0000, nan=0]  Step 1100 | total=3.3750 match=3.3750 pose_raw=0.00 lp=0.0000 | gt_matches=1546 nan_skipped=0
+Epoch 01/14:  81%|████▊ | 1149/1417 [10:08:39<18:22,  4.11s/it, loss=2.5330, match=2.5330, pose=0.00, lp=0.0000, nan=0]  Step 1150 | total=2.5330 match=2.5330 pose_raw=0.00 lp=0.0000 | gt_matches=1587 nan_skipped=0
+Epoch 01/14:  85%|█████ | 1199/1417 [10:11:58<13:51,  3.82s/it, loss=2.8752, match=2.8752, pose=0.00, lp=0.0000, nan=0]  Step 1200 | total=2.8752 match=2.8752 pose_raw=0.00 lp=0.0000 | gt_matches=1553 nan_skipped=0
+Epoch 01/14:  88%|█████▎| 1249/1417 [10:15:17<12:43,  4.55s/it, loss=3.2874, match=3.2874, pose=0.00, lp=0.0000, nan=0]  Step 1250 | total=3.2874 match=3.2874 pose_raw=0.00 lp=0.0000 | gt_matches=1474 nan_skipped=0
+Epoch 01/14:  92%|█████▌| 1299/1417 [10:18:32<07:20,  3.73s/it, loss=3.0202, match=3.0202, pose=0.00, lp=0.0000, nan=0]  Step 1300 | total=3.0202 match=3.0202 pose_raw=0.00 lp=0.0000 | gt_matches=1539 nan_skipped=0
+Epoch 01/14:  95%|█████▋| 1349/1417 [10:22:25<07:18,  6.45s/it, loss=4.0684, match=4.0684, pose=0.00, lp=0.0000, nan=0]  Step 1350 | total=4.0684 match=4.0684 pose_raw=0.00 lp=0.0000 | gt_matches=1391 nan_skipped=0
+Epoch 01/14:  99%|█████▉| 1399/1417 [10:27:10<02:06,  7.00s/it, loss=2.9797, match=2.9797, pose=0.00, lp=0.0000, nan=0]  Step 1400 | total=2.9797 match=2.9797 pose_raw=0.00 lp=0.0000 | gt_matches=1522 nan_skipped=0
+Epoch 01/14: 100%|██████| 1417/1417 [10:29:06<00:00, 26.64s/it, loss=2.9993, match=2.9993, pose=0.00, lp=0.0000, nan=0]
+
+Epoch 01 complete in 37746s | avg_total=3.7046 avg_match=3.7046 avg_pose=0.0000 lp=0.0000 nan_skipped=0
+  Checkpoint saved: checkpoints_v05_tartanair\epoch_01.pth
+Epoch 02/14:   2%|▏        | 32/1417 [03:30<1:53:09,  4.90s/it, loss=2.8262, match=2.8262, pose=0.00, lp=0.0000, nan=0]  Step 1450 | total=2.8262 match=2.8262 pose_raw=0.00 lp=0.0000 | gt_matches=1660 nan_skipped=0
+Epoch 02/14:   6%|▌        | 82/1417 [06:50<1:40:24,  4.51s/it, loss=2.8091, match=2.8091, pose=0.00, lp=0.0000, nan=0]  Step 1500 | total=2.8091 match=2.8091 pose_raw=0.00 lp=0.0000 | gt_matches=1615 nan_skipped=0
+Epoch 02/14:   9%|▋       | 132/1417 [10:14<1:28:54,  4.15s/it, loss=2.6732, match=2.6732, pose=0.00, lp=0.0000, nan=0]  Step 1550 | total=2.6732 match=2.6732 pose_raw=0.00 lp=0.0000 | gt_matches=1636 nan_skipped=0
+Epoch 02/14:  13%|█       | 182/1417 [13:28<1:18:57,  3.84s/it, loss=3.0842, match=3.0842, pose=0.00, lp=0.0000, nan=0]  Step 1600 | total=3.0842 match=3.0842 pose_raw=0.00 lp=0.0000 | gt_matches=1567 nan_skipped=0
+Epoch 02/14:  16%|█▎      | 232/1417 [16:36<1:13:14,  3.71s/it, loss=2.6734, match=2.6734, pose=0.00, lp=0.0000, nan=0]  Step 1650 | total=2.6734 match=2.6734 pose_raw=0.00 lp=0.0000 | gt_matches=1328 nan_skipped=0
+Epoch 02/14:  20%|█▌      | 282/1417 [20:01<1:19:07,  4.18s/it, loss=3.1038, match=3.1038, pose=0.00, lp=0.0000, nan=0]  Step 1700 | total=3.1038 match=3.1038 pose_raw=0.00 lp=0.0000 | gt_matches=1601 nan_skipped=0
+Epoch 02/14:  23%|█▊      | 332/1417 [24:36<1:49:48,  6.07s/it, loss=2.6927, match=2.6927, pose=0.00, lp=0.0000, nan=0]  Step 1750 | total=2.6927 match=2.6927 pose_raw=0.00 lp=0.0000 | gt_matches=1477 nan_skipped=0
+Epoch 02/14:  27%|██▏     | 382/1417 [28:24<1:04:12,  3.72s/it, loss=3.0770, match=3.0770, pose=0.00, lp=0.0000, nan=0]  Step 1800 | total=3.0770 match=3.0770 pose_raw=0.00 lp=0.0000 | gt_matches=1504 nan_skipped=0
+Epoch 02/14:  30%|██▍     | 432/1417 [31:52<1:02:47,  3.82s/it, loss=3.4808, match=3.4808, pose=0.00, lp=0.0000, nan=0]  Step 1850 | total=3.4808 match=3.4808 pose_raw=0.00 lp=0.0000 | gt_matches=1434 nan_skipped=0
+Epoch 02/14:  34%|███▍      | 482/1417 [35:00<55:52,  3.59s/it, loss=2.7340, match=2.7340, pose=0.00, lp=0.0000, nan=0]  Step 1900 | total=2.7340 match=2.7340 pose_raw=0.00 lp=0.0000 | gt_matches=1471 nan_skipped=0
+Epoch 02/14:  38%|███▊      | 532/1417 [38:00<50:42,  3.44s/it, loss=2.4496, match=2.4496, pose=0.00, lp=0.0000, nan=0]  Step 1950 | total=2.4496 match=2.4496 pose_raw=0.00 lp=0.0000 | gt_matches=1586 nan_skipped=0
+Epoch 02/14:  41%|████      | 582/1417 [41:02<47:51,  3.44s/it, loss=2.8143, match=2.8143, pose=0.00, lp=0.0000, nan=0]  Step 2000 | total=2.8143 match=2.8143 pose_raw=0.00 lp=0.0000 | gt_matches=1545 nan_skipped=0
+Epoch 02/14:  45%|████▍     | 632/1417 [44:25<51:36,  3.94s/it, loss=2.7237, match=2.7237, pose=0.00, lp=0.0000, nan=0]  Step 2050 | total=2.7237 match=2.7237 pose_raw=0.00 lp=0.0000 | gt_matches=1389 nan_skipped=0
+Epoch 02/14:  48%|████▊     | 682/1417 [47:39<43:51,  3.58s/it, loss=2.7500, match=2.7500, pose=0.00, lp=0.0000, nan=0]  Step 2100 | total=2.7500 match=2.7500 pose_raw=0.00 lp=0.0000 | gt_matches=1579 nan_skipped=0
+Epoch 02/14:  52%|█████▏    | 732/1417 [50:39<42:43,  3.74s/it, loss=3.0665, match=3.0665, pose=0.00, lp=0.0000, nan=0]  Step 2150 | total=3.0665 match=3.0665 pose_raw=0.00 lp=0.0000 | gt_matches=1537 nan_skipped=0
+Epoch 02/14:  55%|█████▌    | 782/1417 [53:35<37:39,  3.56s/it, loss=2.9034, match=2.9034, pose=0.00, lp=0.0000, nan=0]  Step 2200 | total=2.9034 match=2.9034 pose_raw=0.00 lp=0.0000 | gt_matches=1491 nan_skipped=0
+Epoch 02/14:  59%|█████▊    | 832/1417 [56:34<34:34,  3.55s/it, loss=2.3269, match=2.3269, pose=0.00, lp=0.0000, nan=0]  Step 2250 | total=2.3269 match=2.3269 pose_raw=0.00 lp=0.0000 | gt_matches=1575 nan_skipped=0
+Epoch 02/14:  62%|██████▏   | 882/1417 [59:34<33:37,  3.77s/it, loss=2.4896, match=2.4896, pose=0.00, lp=0.0000, nan=0]  Step 2300 | total=2.4896 match=2.4896 pose_raw=0.00 lp=0.0000 | gt_matches=1614 nan_skipped=0
+Epoch 02/14:  66%|█████▎  | 932/1417 [1:02:25<24:05,  2.98s/it, loss=2.9366, match=2.9366, pose=0.00, lp=0.0000, nan=0]  Step 2350 | total=2.9366 match=2.9366 pose_raw=0.00 lp=0.0000 | gt_matches=1503 nan_skipped=0
+Epoch 02/14:  69%|█████▌  | 982/1417 [1:04:50<20:47,  2.87s/it, loss=2.4621, match=2.4621, pose=0.00, lp=0.0000, nan=0]  Step 2400 | total=2.4621 match=2.4621 pose_raw=0.00 lp=0.0000 | gt_matches=1791 nan_skipped=0
+Epoch 02/14:  73%|█████  | 1032/1417 [1:07:15<18:23,  2.87s/it, loss=2.5011, match=2.5011, pose=0.00, lp=0.0000, nan=0]  Step 2450 | total=2.5011 match=2.5011 pose_raw=0.00 lp=0.0000 | gt_matches=1578 nan_skipped=0
+Epoch 02/14:  76%|█████▎ | 1082/1417 [1:09:39<16:14,  2.91s/it, loss=2.7676, match=2.7676, pose=0.00, lp=0.0000, nan=0]  Step 2500 | total=2.7676 match=2.7676 pose_raw=0.00 lp=0.0000 | gt_matches=1623 nan_skipped=0
+Epoch 02/14:  80%|█████▌ | 1132/1417 [1:12:04<13:45,  2.89s/it, loss=2.6877, match=2.6877, pose=0.00, lp=0.0000, nan=0]  Step 2550 | total=2.6877 match=2.6877 pose_raw=0.00 lp=0.0000 | gt_matches=1562 nan_skipped=0
+Epoch 02/14:  83%|█████▊ | 1182/1417 [1:14:28<11:17,  2.88s/it, loss=3.1051, match=3.1051, pose=0.00, lp=0.0000, nan=0]  Step 2600 | total=3.1051 match=3.1051 pose_raw=0.00 lp=0.0000 | gt_matches=1483 nan_skipped=0
+Epoch 02/14:  87%|██████ | 1232/1417 [1:16:54<08:48,  2.86s/it, loss=2.4702, match=2.4702, pose=0.00, lp=0.0000, nan=0]  Step 2650 | total=2.4702 match=2.4702 pose_raw=0.00 lp=0.0000 | gt_matches=1758 nan_skipped=0
+Epoch 02/14:  90%|██████▎| 1282/1417 [1:19:28<07:24,  3.29s/it, loss=2.5642, match=2.5642, pose=0.00, lp=0.0000, nan=0]  Step 2700 | total=2.5642 match=2.5642 pose_raw=0.00 lp=0.0000 | gt_matches=1490 nan_skipped=0
+Epoch 02/14:  94%|██████▌| 1332/1417 [1:22:10<04:36,  3.25s/it, loss=2.5876, match=2.5876, pose=0.00, lp=0.0000, nan=0]  Step 2750 | total=2.5876 match=2.5876 pose_raw=0.00 lp=0.0000 | gt_matches=1504 nan_skipped=0
+Epoch 02/14:  98%|██████▊| 1382/1417 [1:24:43<01:47,  3.07s/it, loss=2.6864, match=2.6864, pose=0.00, lp=0.0000, nan=0]  Step 2800 | total=2.6864 match=2.6864 pose_raw=0.00 lp=0.0000 | gt_matches=1478 nan_skipped=0
+Epoch 02/14: 100%|███████| 1417/1417 [1:26:38<00:00,  3.67s/it, loss=2.6485, match=2.6485, pose=0.00, lp=0.0000, nan=0]
+
+Epoch 02 complete in 5198s | avg_total=2.8006 avg_match=2.8006 avg_pose=0.0000 lp=0.0000 nan_skipped=0
+  Checkpoint saved: checkpoints_v05_tartanair\epoch_02.pth
+Epoch 03/14:   1%|         | 15/1417 [01:04<1:33:09,  3.99s/it, loss=2.3403, match=2.3403, pose=0.00, lp=0.0000, nan=0]  Step 2850 | total=2.3403 match=2.3403 pose_raw=0.00 lp=0.0000 | gt_matches=1508 nan_skipped=0
+Epoch 03/14:   5%|▍        | 65/1417 [03:49<1:10:20,  3.12s/it, loss=2.7105, match=2.7105, pose=0.00, lp=0.0000, nan=0]  Step 2900 | total=2.7105 match=2.7105 pose_raw=0.00 lp=0.0000 | gt_matches=1376 nan_skipped=0
+Epoch 03/14:   8%|▋       | 115/1417 [06:41<1:25:07,  3.92s/it, loss=2.7985, match=2.7985, pose=0.00, lp=0.0000, nan=0]  Step 2950 | total=2.7985 match=2.7985 pose_raw=0.00 lp=0.0000 | gt_matches=1457 nan_skipped=0
+Epoch 03/14:  12%|▉       | 165/1417 [10:20<1:16:45,  3.68s/it, loss=2.4151, match=2.4151, pose=0.00, lp=0.0000, nan=0]  Step 3000 | total=2.4151 match=2.4151 pose_raw=0.00 lp=0.0000 | gt_matches=1496 nan_skipped=0
+Epoch 03/14:  15%|█▏      | 215/1417 [13:55<1:23:16,  4.16s/it, loss=2.7927, match=2.7927, pose=0.00, lp=0.0000, nan=0]  Step 3050 | total=2.7927 match=2.7927 pose_raw=0.00 lp=0.0000 | gt_matches=1470 nan_skipped=0
+Epoch 03/14:  19%|█▍      | 265/1417 [17:40<1:41:04,  5.26s/it, loss=2.4065, match=2.4065, pose=0.00, lp=0.0000, nan=0]  Step 3100 | total=2.4065 match=2.4065 pose_raw=0.00 lp=0.0000 | gt_matches=1720 nan_skipped=0
+Epoch 03/14:  22%|█▊      | 315/1417 [21:58<1:35:53,  5.22s/it, loss=2.5323, match=2.5323, pose=0.00, lp=0.0000, nan=0]  Step 3150 | total=2.5323 match=2.5323 pose_raw=0.00 lp=0.0000 | gt_matches=1478 nan_skipped=0
+Epoch 03/14:  26%|██      | 365/1417 [26:11<1:28:43,  5.06s/it, loss=2.3611, match=2.3611, pose=0.00, lp=0.0000, nan=0]  Step 3200 | total=2.3611 match=2.3611 pose_raw=0.00 lp=0.0000 | gt_matches=1612 nan_skipped=0
+Epoch 03/14:  29%|██▎     | 415/1417 [30:23<1:24:01,  5.03s/it, loss=2.4697, match=2.4697, pose=0.00, lp=0.0000, nan=0]  Step 3250 | total=2.4697 match=2.4697 pose_raw=0.00 lp=0.0000 | gt_matches=1493 nan_skipped=0
+Epoch 03/14:  33%|██▋     | 465/1417 [34:38<1:20:21,  5.07s/it, loss=2.3267, match=2.3267, pose=0.00, lp=0.0000, nan=0]  Step 3300 | total=2.3267 match=2.3267 pose_raw=0.00 lp=0.0000 | gt_matches=1746 nan_skipped=0
+Epoch 03/14:  36%|██▉     | 515/1417 [38:53<1:15:15,  5.01s/it, loss=2.2561, match=2.2561, pose=0.00, lp=0.0000, nan=0]  Step 3350 | total=2.2561 match=2.2561 pose_raw=0.00 lp=0.0000 | gt_matches=1683 nan_skipped=0
+Epoch 03/14:  40%|███▏    | 565/1417 [43:07<1:14:01,  5.21s/it, loss=2.5513, match=2.5513, pose=0.00, lp=0.0000, nan=0]  Step 3400 | total=2.5513 match=2.5513 pose_raw=0.00 lp=0.0000 | gt_matches=1428 nan_skipped=0
+Epoch 03/14:  43%|███▍    | 615/1417 [47:19<1:06:45,  4.99s/it, loss=2.2365, match=2.2365, pose=0.00, lp=0.0000, nan=0]  Step 3450 | total=2.2365 match=2.2365 pose_raw=0.00 lp=0.0000 | gt_matches=1441 nan_skipped=0
+Epoch 03/14:  47%|███▊    | 665/1417 [51:31<1:02:28,  4.99s/it, loss=2.1662, match=2.1662, pose=0.00, lp=0.0000, nan=0]  Step 3500 | total=2.1662 match=2.1662 pose_raw=0.00 lp=0.0000 | gt_matches=1653 nan_skipped=0
+Epoch 03/14:  50%|█████     | 715/1417 [55:43<59:40,  5.10s/it, loss=2.7762, match=2.7762, pose=0.00, lp=0.0000, nan=0]  Step 3550 | total=2.7762 match=2.7762 pose_raw=0.00 lp=0.0000 | gt_matches=1545 nan_skipped=0
+Epoch 03/14:  54%|█████▍    | 765/1417 [59:25<46:51,  4.31s/it, loss=1.9993, match=1.9993, pose=0.00, lp=0.0000, nan=0]  Step 3600 | total=1.9993 match=1.9993 pose_raw=0.00 lp=0.0000 | gt_matches=1628 nan_skipped=0
+Epoch 03/14:  58%|████▌   | 815/1417 [1:03:32<54:27,  5.43s/it, loss=3.0327, match=3.0327, pose=0.00, lp=0.0000, nan=0]  Step 3650 | total=3.0327 match=3.0327 pose_raw=0.00 lp=0.0000 | gt_matches=1392 nan_skipped=0
+Epoch 03/14:  61%|████▉   | 865/1417 [1:07:24<42:36,  4.63s/it, loss=2.3698, match=2.3698, pose=0.00, lp=0.0000, nan=0]  Step 3700 | total=2.3698 match=2.3698 pose_raw=0.00 lp=0.0000 | gt_matches=1556 nan_skipped=0
+Epoch 03/14:  65%|█████▏  | 915/1417 [1:11:25<43:07,  5.16s/it, loss=2.4736, match=2.4736, pose=0.00, lp=0.0000, nan=0]  Step 3750 | total=2.4736 match=2.4736 pose_raw=0.00 lp=0.0000 | gt_matches=1466 nan_skipped=0
+Epoch 03/14:  68%|█████▍  | 965/1417 [1:15:55<40:42,  5.40s/it, loss=2.4069, match=2.4069, pose=0.00, lp=0.0000, nan=0]  Step 3800 | total=2.4069 match=2.4069 pose_raw=0.00 lp=0.0000 | gt_matches=1513 nan_skipped=0
+Epoch 03/14:  72%|█████  | 1015/1417 [1:20:21<36:30,  5.45s/it, loss=2.4468, match=2.4468, pose=0.00, lp=0.0000, nan=0]  Step 3850 | total=2.4468 match=2.4468 pose_raw=0.00 lp=0.0000 | gt_matches=1353 nan_skipped=0
+Epoch 03/14:  75%|█████▎ | 1065/1417 [1:24:48<31:52,  5.43s/it, loss=2.7583, match=2.7583, pose=0.00, lp=0.0000, nan=0]  Step 3900 | total=2.7583 match=2.7583 pose_raw=0.00 lp=0.0000 | gt_matches=1503 nan_skipped=0
+Epoch 03/14:  79%|█████▌ | 1115/1417 [1:29:17<27:05,  5.38s/it, loss=2.4712, match=2.4712, pose=0.00, lp=0.0000, nan=0]  Step 3950 | total=2.4712 match=2.4712 pose_raw=0.00 lp=0.0000 | gt_matches=1415 nan_skipped=0
+Epoch 03/14:  82%|█████▊ | 1165/1417 [1:33:52<21:11,  5.05s/it, loss=2.3416, match=2.3416, pose=0.00, lp=0.0000, nan=0]  Step 4000 | total=2.3416 match=2.3416 pose_raw=0.00 lp=0.0000 | gt_matches=1566 nan_skipped=0
+Epoch 03/14:  86%|██████ | 1215/1417 [1:37:30<14:18,  4.25s/it, loss=2.2218, match=2.2218, pose=0.00, lp=0.0000, nan=0]  Step 4050 | total=2.2218 match=2.2218 pose_raw=0.00 lp=0.0000 | gt_matches=1554 nan_skipped=0
+Epoch 03/14:  89%|██████▏| 1265/1417 [1:40:59<10:28,  4.13s/it, loss=2.0208, match=2.0208, pose=0.00, lp=0.0000, nan=0]  Step 4100 | total=2.0208 match=2.0208 pose_raw=0.00 lp=0.0000 | gt_matches=1435 nan_skipped=0
+Epoch 03/14:  93%|██████▍| 1315/1417 [1:44:28<07:07,  4.19s/it, loss=2.3550, match=2.3550, pose=0.00, lp=0.0000, nan=0]  Step 4150 | total=2.3550 match=2.3550 pose_raw=0.00 lp=0.0000 | gt_matches=1226 nan_skipped=0
+Epoch 03/14:  96%|██████▋| 1365/1417 [1:47:57<03:37,  4.18s/it, loss=2.0804, match=2.0804, pose=0.00, lp=0.0000, nan=0]  Step 4200 | total=2.0804 match=2.0804 pose_raw=0.00 lp=0.0000 | gt_matches=1476 nan_skipped=0
+Epoch 03/14: 100%|██████▉| 1415/1417 [1:51:26<00:08,  4.13s/it, loss=2.6830, match=2.6830, pose=0.00, lp=0.0000, nan=0]  Step 4250 | total=2.6830 match=2.6830 pose_raw=0.00 lp=0.0000 | gt_matches=1608 nan_skipped=0
+Epoch 03/14: 100%|███████| 1417/1417 [1:51:28<00:00,  4.72s/it, loss=2.9786, match=2.9786, pose=0.00, lp=0.0000, nan=0]
+
+Epoch 03 complete in 6689s | avg_total=2.4660 avg_match=2.4660 avg_pose=0.0000 lp=0.0000 nan_skipped=0
+  Checkpoint saved: checkpoints_v05_tartanair\epoch_03.pth
+Epoch 04/14:   3%|▎        | 48/1417 [03:26<1:36:17,  4.22s/it, loss=2.0767, match=2.0767, pose=0.00, lp=0.0000, nan=0]  Step 4300 | total=2.0767 match=2.0767 pose_raw=0.00 lp=0.0000 | gt_matches=1561 nan_skipped=0
+Epoch 04/14:   7%|▌        | 98/1417 [06:56<1:32:20,  4.20s/it, loss=2.4689, match=2.4689, pose=0.00, lp=0.0000, nan=0]  Step 4350 | total=2.4689 match=2.4689 pose_raw=0.00 lp=0.0000 | gt_matches=1510 nan_skipped=0
+Epoch 04/14:  10%|▊       | 148/1417 [10:27<1:28:51,  4.20s/it, loss=2.0575, match=2.0575, pose=0.00, lp=0.0000, nan=0]  Step 4400 | total=2.0575 match=2.0575 pose_raw=0.00 lp=0.0000 | gt_matches=1526 nan_skipped=0
+Epoch 04/14:  14%|█       | 198/1417 [13:55<1:25:11,  4.19s/it, loss=2.1647, match=2.1647, pose=0.00, lp=0.0000, nan=0]  Step 4450 | total=2.1647 match=2.1647 pose_raw=0.00 lp=0.0000 | gt_matches=1506 nan_skipped=0
+Epoch 04/14:  18%|█▍      | 248/1417 [17:24<1:21:33,  4.19s/it, loss=2.1043, match=2.1043, pose=0.00, lp=0.0000, nan=0]  Step 4500 | total=2.1043 match=2.1043 pose_raw=0.00 lp=0.0000 | gt_matches=1512 nan_skipped=0
+Epoch 04/14:  21%|█▋      | 298/1417 [20:53<1:16:53,  4.12s/it, loss=2.3929, match=2.3929, pose=0.00, lp=0.0000, nan=0]  Step 4550 | total=2.3929 match=2.3929 pose_raw=0.00 lp=0.0000 | gt_matches=1542 nan_skipped=0
+Epoch 04/14:  25%|█▉      | 348/1417 [24:21<1:14:30,  4.18s/it, loss=2.0599, match=2.0599, pose=0.00, lp=0.0000, nan=0]  Step 4600 | total=2.0599 match=2.0599 pose_raw=0.00 lp=0.0000 | gt_matches=1607 nan_skipped=0
+Epoch 04/14:  28%|██▏     | 398/1417 [27:49<1:11:26,  4.21s/it, loss=1.9381, match=1.9381, pose=0.00, lp=0.0000, nan=0]  Step 4650 | total=1.9381 match=1.9381 pose_raw=0.00 lp=0.0000 | gt_matches=1396 nan_skipped=0
+Epoch 04/14:  32%|██▌     | 448/1417 [31:18<1:07:30,  4.18s/it, loss=2.9806, match=2.9806, pose=0.00, lp=0.0000, nan=0]  Step 4700 | total=2.9806 match=2.9806 pose_raw=0.00 lp=0.0000 | gt_matches=1605 nan_skipped=0
+Epoch 04/14:  35%|██▊     | 498/1417 [34:45<1:03:17,  4.13s/it, loss=1.7959, match=1.7959, pose=0.00, lp=0.0000, nan=0]  Step 4750 | total=1.7959 match=1.7959 pose_raw=0.00 lp=0.0000 | gt_matches=1452 nan_skipped=0
+Epoch 04/14:  39%|███▊      | 548/1417 [38:13<59:41,  4.12s/it, loss=2.2771, match=2.2771, pose=0.00, lp=0.0000, nan=0]  Step 4800 | total=2.2771 match=2.2771 pose_raw=0.00 lp=0.0000 | gt_matches=1548 nan_skipped=0
+Epoch 04/14:  42%|████▏     | 598/1417 [41:42<57:07,  4.19s/it, loss=1.8298, match=1.8298, pose=0.00, lp=0.0000, nan=0]  Step 4850 | total=1.8298 match=1.8298 pose_raw=0.00 lp=0.0000 | gt_matches=1470 nan_skipped=0
+Epoch 04/14:  46%|████▌     | 648/1417 [45:11<53:54,  4.21s/it, loss=1.6787, match=1.6787, pose=0.00, lp=0.0000, nan=0]  Step 4900 | total=1.6787 match=1.6787 pose_raw=0.00 lp=0.0000 | gt_matches=1596 nan_skipped=0
+Epoch 04/14:  49%|████▉     | 698/1417 [48:39<51:07,  4.27s/it, loss=2.0606, match=2.0606, pose=0.00, lp=0.0000, nan=0]  Step 4950 | total=2.0606 match=2.0606 pose_raw=0.00 lp=0.0000 | gt_matches=1496 nan_skipped=0
+Epoch 04/14:  53%|█████▎    | 748/1417 [52:10<46:32,  4.17s/it, loss=1.7018, match=1.7018, pose=0.00, lp=0.0000, nan=0]  Step 5000 | total=1.7018 match=1.7018 pose_raw=0.00 lp=0.0000 | gt_matches=1620 nan_skipped=0
+Epoch 04/14:  56%|█████▋    | 798/1417 [55:40<43:12,  4.19s/it, loss=1.9456, match=1.9456, pose=0.00, lp=0.0000, nan=0]  Step 5050 | total=1.9456 match=1.9456 pose_raw=0.00 lp=0.0000 | gt_matches=1448 nan_skipped=0
+Epoch 04/14:  60%|█████▉    | 848/1417 [59:12<40:16,  4.25s/it, loss=1.9684, match=1.9684, pose=0.00, lp=0.0000, nan=0]  Step 5100 | total=1.9684 match=1.9684 pose_raw=0.00 lp=0.0000 | gt_matches=1424 nan_skipped=0
+Epoch 04/14:  63%|█████   | 898/1417 [1:02:43<36:05,  4.17s/it, loss=1.9877, match=1.9877, pose=0.00, lp=0.0000, nan=0]  Step 5150 | total=1.9877 match=1.9877 pose_raw=0.00 lp=0.0000 | gt_matches=1470 nan_skipped=0
+Epoch 04/14:  67%|█████▎  | 948/1417 [1:06:11<32:55,  4.21s/it, loss=2.1077, match=2.1077, pose=0.00, lp=0.0000, nan=0]  Step 5200 | total=2.1077 match=2.1077 pose_raw=0.00 lp=0.0000 | gt_matches=1547 nan_skipped=0
+Epoch 04/14:  70%|█████▋  | 998/1417 [1:09:42<29:46,  4.26s/it, loss=2.0851, match=2.0851, pose=0.00, lp=0.0000, nan=0]  Step 5250 | total=2.0851 match=2.0851 pose_raw=0.00 lp=0.0000 | gt_matches=1487 nan_skipped=0
+Epoch 04/14:  74%|█████▏ | 1048/1417 [1:13:32<29:48,  4.85s/it, loss=2.2470, match=2.2470, pose=0.00, lp=0.0000, nan=0]  Step 5300 | total=2.2470 match=2.2470 pose_raw=0.00 lp=0.0000 | gt_matches=1372 nan_skipped=0
+Epoch 04/14:  77%|█████▍ | 1098/1417 [1:17:27<25:55,  4.88s/it, loss=1.7092, match=1.7092, pose=0.00, lp=0.0000, nan=0]  Step 5350 | total=1.7092 match=1.7092 pose_raw=0.00 lp=0.0000 | gt_matches=1578 nan_skipped=0
+Epoch 04/14:  81%|█████▋ | 1148/1417 [1:21:47<24:26,  5.45s/it, loss=1.8200, match=1.8200, pose=0.00, lp=0.0000, nan=0]  Step 5400 | total=1.8200 match=1.8200 pose_raw=0.00 lp=0.0000 | gt_matches=1723 nan_skipped=0
+Epoch 04/14:  85%|█████▉ | 1198/1417 [1:26:15<19:16,  5.28s/it, loss=2.1078, match=2.1078, pose=0.00, lp=0.0000, nan=0]  Step 5450 | total=2.1078 match=2.1078 pose_raw=0.00 lp=0.0000 | gt_matches=1411 nan_skipped=0
+Epoch 04/14:  88%|██████▏| 1248/1417 [1:30:41<14:33,  5.17s/it, loss=1.8058, match=1.8058, pose=0.00, lp=0.0000, nan=0]  Step 5500 | total=1.8058 match=1.8058 pose_raw=0.00 lp=0.0000 | gt_matches=1518 nan_skipped=0
+Epoch 04/14:  92%|██████▍| 1298/1417 [1:35:01<10:27,  5.28s/it, loss=1.8397, match=1.8397, pose=0.00, lp=0.0000, nan=0]  Step 5550 | total=1.8397 match=1.8397 pose_raw=0.00 lp=0.0000 | gt_matches=1617 nan_skipped=0
+Epoch 04/14:  95%|██████▋| 1348/1417 [1:39:23<06:04,  5.28s/it, loss=1.6580, match=1.6580, pose=0.00, lp=0.0000, nan=0]  Step 5600 | total=1.6580 match=1.6580 pose_raw=0.00 lp=0.0000 | gt_matches=1771 nan_skipped=0
+Epoch 04/14:  99%|██████▉| 1398/1417 [1:43:44<01:39,  5.25s/it, loss=1.7466, match=1.7466, pose=0.00, lp=0.0000, nan=0]  Step 5650 | total=1.7466 match=1.7466 pose_raw=0.00 lp=0.0000 | gt_matches=1423 nan_skipped=0
+Epoch 04/14: 100%|███████| 1417/1417 [1:44:53<00:00,  4.44s/it, loss=1.9695, match=1.9695, pose=0.00, lp=0.0000, nan=0]
+
+Epoch 04 complete in 6294s | avg_total=2.0744 avg_match=2.0744 avg_pose=0.0000 lp=0.0000 nan_skipped=0
+  Checkpoint saved: checkpoints_v05_tartanair\epoch_04.pth
+Epoch 05/14:   2%|▏      | 31/1417 [02:08<1:31:59,  3.98s/it, loss=4.3384, match=2.3376, pose=432.60, lp=0.0048, nan=0]  Step 5700 | total=4.3384 match=2.3376 pose_raw=432.60 lp=0.0048 | gt_matches=1517 nan_skipped=0
+Epoch 05/14:   6%|▍      | 81/1417 [05:33<1:30:04,  4.05s/it, loss=8.1687, match=2.0311, pose=507.19, lp=0.0123, nan=0]  Step 5750 | total=8.1687 match=2.0311 pose_raw=507.19 lp=0.0123 | gt_matches=1290 nan_skipped=0
+Epoch 05/14:   9%|▍    | 131/1417 [09:00<1:27:01,  4.06s/it, loss=10.8418, match=1.5317, pose=475.33, lp=0.0198, nan=0]  Step 5800 | total=10.8418 match=1.5317 pose_raw=475.33 lp=0.0198 | gt_matches=1646 nan_skipped=0
+Epoch 05/14:  13%|▋    | 181/1417 [12:38<1:21:58,  3.98s/it, loss=12.8573, match=2.1861, pose=395.23, lp=0.0273, nan=0]  Step 5850 | total=12.8573 match=2.1861 pose_raw=395.23 lp=0.0273 | gt_matches=1537 nan_skipped=0
+Epoch 05/14:  16%|▊    | 231/1417 [16:40<1:40:47,  5.10s/it, loss=18.3262, match=2.0544, pose=471.66, lp=0.0348, nan=0]  Step 5900 | total=18.3262 match=2.0544 pose_raw=471.66 lp=0.0348 | gt_matches=1547 nan_skipped=0
+Epoch 05/14:  20%|▉    | 281/1417 [20:51<1:35:42,  5.05s/it, loss=17.5720, match=2.0037, pose=371.36, lp=0.0423, nan=0]  Step 5950 | total=17.5720 match=2.0037 pose_raw=371.36 lp=0.0423 | gt_matches=1532 nan_skipped=0
+Epoch 05/14:  23%|█▏   | 331/1417 [25:04<1:33:33,  5.17s/it, loss=19.2265, match=2.0593, pose=347.82, lp=0.0498, nan=0]  Step 6000 | total=19.2265 match=2.0593 pose_raw=347.82 lp=0.0498 | gt_matches=1395 nan_skipped=0
+Epoch 05/14:  27%|█▎   | 381/1417 [29:17<1:26:44,  5.02s/it, loss=18.5547, match=1.9187, pose=293.01, lp=0.0573, nan=0]  Step 6050 | total=18.5547 match=1.9187 pose_raw=293.01 lp=0.0573 | gt_matches=1602 nan_skipped=0
+Epoch 05/14:  30%|█▌   | 431/1417 [33:27<1:23:35,  5.09s/it, loss=32.7203, match=1.6342, pose=482.47, lp=0.0648, nan=0]  Step 6100 | total=32.7203 match=1.6342 pose_raw=482.47 lp=0.0648 | gt_matches=1439 nan_skipped=0
+Epoch 05/14:  34%|█▋   | 481/1417 [37:37<1:19:03,  5.07s/it, loss=33.5238, match=2.0305, pose=438.53, lp=0.0723, nan=0]  Step 6150 | total=33.5238 match=2.0305 pose_raw=438.53 lp=0.0723 | gt_matches=1330 nan_skipped=0
+Epoch 05/14:  37%|█▊   | 531/1417 [41:47<1:13:59,  5.01s/it, loss=25.5995, match=1.9735, pose=298.60, lp=0.0798, nan=0]  Step 6200 | total=25.5995 match=1.9735 pose_raw=298.60 lp=0.0798 | gt_matches=1486 nan_skipped=0
+Epoch 05/14:  41%|██   | 581/1417 [45:59<1:09:37,  5.00s/it, loss=31.9520, match=1.7363, pose=348.44, lp=0.0873, nan=0]  Step 6250 | total=31.9520 match=1.7363 pose_raw=348.44 lp=0.0873 | gt_matches=1542 nan_skipped=0
+Epoch 05/14:  45%|██▏  | 631/1417 [50:10<1:04:50,  4.95s/it, loss=42.8618, match=1.6252, pose=437.30, lp=0.0948, nan=0]  Step 6300 | total=42.8618 match=1.6252 pose_raw=437.30 lp=0.0948 | gt_matches=1650 nan_skipped=0
+Epoch 05/14:  48%|███▎   | 681/1417 [54:20<56:54,  4.64s/it, loss=48.5596, match=2.1056, pose=456.87, lp=0.1023, nan=0]  Step 6350 | total=48.5596 match=2.1056 pose_raw=456.87 lp=0.1023 | gt_matches=1533 nan_skipped=0
+Epoch 05/14:  52%|███▌   | 731/1417 [58:00<48:24,  4.23s/it, loss=50.4919, match=2.1492, pose=443.03, lp=0.1098, nan=0]  Step 6400 | total=50.4919 match=2.1492 pose_raw=443.03 lp=0.1098 | gt_matches=1559 nan_skipped=0
+Epoch 05/14:  55%|██▊  | 781/1417 [1:02:09<53:11,  5.02s/it, loss=43.7045, match=1.6639, pose=360.52, lp=0.1173, nan=0]  Step 6450 | total=43.7045 match=1.6639 pose_raw=360.52 lp=0.1173 | gt_matches=1414 nan_skipped=0
+Epoch 05/14:  59%|██▉  | 831/1417 [1:06:23<50:23,  5.16s/it, loss=39.8536, match=2.0233, pose=305.51, lp=0.1248, nan=0]  Step 6500 | total=39.8536 match=2.0233 pose_raw=305.51 lp=0.1248 | gt_matches=1398 nan_skipped=0
+Epoch 05/14:  62%|███  | 881/1417 [1:10:34<45:10,  5.06s/it, loss=53.5817, match=1.5454, pose=395.31, lp=0.1323, nan=0]  Step 6550 | total=53.5817 match=1.5454 pose_raw=395.31 lp=0.1323 | gt_matches=1583 nan_skipped=0
+Epoch 05/14:  66%|███▎ | 931/1417 [1:14:48<40:28,  5.00s/it, loss=56.7705, match=2.1248, pose=393.43, lp=0.1398, nan=0]  Step 6600 | total=56.7705 match=2.1248 pose_raw=393.43 lp=0.1398 | gt_matches=1509 nan_skipped=0
+Epoch 05/14:  69%|███▍ | 981/1417 [1:19:00<37:21,  5.14s/it, loss=53.3561, match=1.5110, pose=353.84, lp=0.1473, nan=0]  Step 6650 | total=53.3561 match=1.5110 pose_raw=353.84 lp=0.1473 | gt_matches=1733 nan_skipped=0
+Epoch 05/14:  73%|██▉ | 1031/1417 [1:23:14<33:08,  5.15s/it, loss=57.2704, match=1.7531, pose=360.74, lp=0.1548, nan=0]  Step 6700 | total=57.2704 match=1.7531 pose_raw=360.74 lp=0.1548 | gt_matches=1540 nan_skipped=0
+Epoch 05/14:  76%|███ | 1081/1417 [1:27:34<28:32,  5.10s/it, loss=80.1924, match=1.8295, pose=485.10, lp=0.1623, nan=0]  Step 6750 | total=80.1924 match=1.8295 pose_raw=485.10 lp=0.1623 | gt_matches=1773 nan_skipped=0
+Epoch 05/14:  80%|███▏| 1131/1417 [1:31:47<23:18,  4.89s/it, loss=78.5238, match=1.7586, pose=454.25, lp=0.1698, nan=0]  Step 6800 | total=78.5238 match=1.7586 pose_raw=454.25 lp=0.1698 | gt_matches=1501 nan_skipped=0
+Epoch 05/14:  83%|███▎| 1181/1417 [1:36:04<20:18,  5.16s/it, loss=56.4631, match=2.0353, pose=309.28, lp=0.1773, nan=0]  Step 6850 | total=56.4631 match=2.0353 pose_raw=309.28 lp=0.1773 | gt_matches=1276 nan_skipped=0
+Epoch 05/14:  87%|███▍| 1231/1417 [1:39:24<08:54,  2.88s/it, loss=87.9131, match=2.0171, pose=467.20, lp=0.1848, nan=0]  Step 6900 | total=87.9131 match=2.0171 pose_raw=467.20 lp=0.1848 | gt_matches=1436 nan_skipped=0
+Epoch 05/14:  90%|███▌| 1281/1417 [1:41:47<06:41,  2.95s/it, loss=78.2664, match=1.6239, pose=400.49, lp=0.1923, nan=0]  Step 6950 | total=78.2664 match=1.6239 pose_raw=400.49 lp=0.1923 | gt_matches=1625 nan_skipped=0
+Epoch 05/14:  94%|███▊| 1331/1417 [1:44:12<04:15,  2.97s/it, loss=76.9741, match=1.8812, pose=378.01, lp=0.1998, nan=0]  Step 7000 | total=76.9741 match=1.8812 pose_raw=378.01 lp=0.1998 | gt_matches=1512 nan_skipped=0
+Epoch 05/14:  97%|███▉| 1381/1417 [1:46:41<01:43,  2.88s/it, loss=91.4661, match=1.6586, pose=435.20, lp=0.2073, nan=0]  Step 7050 | total=91.4661 match=1.6586 pose_raw=435.20 lp=0.2073 | gt_matches=1527 nan_skipped=0
+Epoch 05/14: 100%|████| 1417/1417 [1:48:19<00:00,  4.59s/it, loss=82.0755, match=2.2191, pose=378.19, lp=0.2125, nan=0]
+
+Epoch 05 complete in 6500s | avg_total=43.7741 avg_match=1.8809 avg_pose=396.9486 lp=0.2125 nan_skipped=0
+  Checkpoint saved: checkpoints_v05_tartanair\epoch_05.pth
+Epoch 06/14:   1%|     | 14/1417 [00:44<1:07:16,  2.88s/it, loss=102.9021, match=2.0316, pose=471.97, lp=0.2148, nan=0]  Step 7100 | total=102.9021 match=2.0316 pose_raw=471.97 lp=0.2148 | gt_matches=1633 nan_skipped=0
+Epoch 06/14:   5%|▎     | 64/1417 [03:05<1:04:03,  2.84s/it, loss=84.5232, match=1.8000, pose=374.18, lp=0.2223, nan=0]  Step 7150 | total=84.5232 match=1.8000 pose_raw=374.18 lp=0.2223 | gt_matches=1414 nan_skipped=0
+Epoch 06/14:   8%|▍    | 114/1417 [05:28<1:01:06,  2.81s/it, loss=72.4451, match=1.9205, pose=309.02, lp=0.2298, nan=0]  Step 7200 | total=72.4451 match=1.9205 pose_raw=309.02 lp=0.2298 | gt_matches=1585 nan_skipped=0
+Epoch 06/14:  12%|▊      | 164/1417 [07:48<57:47,  2.77s/it, loss=64.2254, match=2.1299, pose=263.97, lp=0.2373, nan=0]  Step 7250 | total=64.2254 match=2.1299 pose_raw=263.97 lp=0.2373 | gt_matches=1450 nan_skipped=0
+Epoch 06/14:  15%|█      | 214/1417 [10:09<56:11,  2.80s/it, loss=94.2399, match=1.5262, pose=380.50, lp=0.2448, nan=0]  Step 7300 | total=94.2399 match=1.5262 pose_raw=380.50 lp=0.2448 | gt_matches=1514 nan_skipped=0
+Epoch 06/14:  19%|█     | 264/1417 [12:31<54:54,  2.86s/it, loss=105.2557, match=1.8118, pose=412.06, lp=0.2523, nan=0]  Step 7350 | total=105.2557 match=1.8118 pose_raw=412.06 lp=0.2523 | gt_matches=1581 nan_skipped=0
+Epoch 06/14:  22%|█▎    | 314/1417 [14:52<53:13,  2.90s/it, loss=107.6733, match=1.7603, pose=409.67, lp=0.2598, nan=0]  Step 7400 | total=107.6733 match=1.7603 pose_raw=409.67 lp=0.2598 | gt_matches=1431 nan_skipped=0
+Epoch 06/14:  26%|█▊     | 364/1417 [17:14<49:35,  2.83s/it, loss=95.6776, match=1.8156, pose=353.17, lp=0.2673, nan=0]  Step 7450 | total=95.6776 match=1.8156 pose_raw=353.17 lp=0.2673 | gt_matches=1410 nan_skipped=0
+Epoch 06/14:  29%|█▊    | 414/1417 [19:36<46:52,  2.80s/it, loss=124.3089, match=1.9212, pose=447.54, lp=0.2748, nan=0]  Step 7500 | total=124.3089 match=1.9212 pose_raw=447.54 lp=0.2748 | gt_matches=1510 nan_skipped=0
+Epoch 06/14:  33%|█▉    | 464/1417 [21:59<45:50,  2.89s/it, loss=130.7613, match=2.1389, pose=458.01, lp=0.2823, nan=0]  Step 7550 | total=130.7613 match=2.1389 pose_raw=458.01 lp=0.2823 | gt_matches=1544 nan_skipped=0
+Epoch 06/14:  36%|██▏   | 514/1417 [24:19<42:15,  2.81s/it, loss=110.1172, match=1.7660, pose=375.85, lp=0.2898, nan=0]  Step 7600 | total=110.1172 match=1.7660 pose_raw=375.85 lp=0.2898 | gt_matches=1599 nan_skipped=0
+Epoch 06/14:  40%|██▍   | 564/1417 [26:34<38:23,  2.70s/it, loss=134.7863, match=1.7836, pose=449.39, lp=0.2973, nan=0]  Step 7650 | total=134.7863 match=1.7836 pose_raw=449.39 lp=0.2973 | gt_matches=1591 nan_skipped=0
+Epoch 06/14:  43%|██▌   | 614/1417 [28:56<38:09,  2.85s/it, loss=138.5152, match=2.0115, pose=450.09, lp=0.3048, nan=0]  Step 7700 | total=138.5152 match=2.0115 pose_raw=450.09 lp=0.3048 | gt_matches=1479 nan_skipped=0
+Epoch 06/14:  47%|██▊   | 664/1417 [31:22<37:24,  2.98s/it, loss=126.1203, match=1.9033, pose=399.85, lp=0.3123, nan=0]  Step 7750 | total=126.1203 match=1.9033 pose_raw=399.85 lp=0.3123 | gt_matches=1593 nan_skipped=0
+Epoch 06/14:  50%|███   | 714/1417 [33:49<32:55,  2.81s/it, loss=104.5717, match=2.3423, pose=322.16, lp=0.3198, nan=0]  Step 7800 | total=104.5717 match=2.3423 pose_raw=322.16 lp=0.3198 | gt_matches=1382 nan_skipped=0
+Epoch 06/14:  54%|███▏  | 764/1417 [36:07<30:03,  2.76s/it, loss=145.8418, match=1.8254, pose=442.05, lp=0.3273, nan=0]  Step 7850 | total=145.8418 match=1.8254 pose_raw=442.05 lp=0.3273 | gt_matches=1647 nan_skipped=0
+Epoch 06/14:  57%|███▍  | 814/1417 [38:27<27:55,  2.78s/it, loss=127.5469, match=1.4840, pose=378.19, lp=0.3348, nan=0]  Step 7900 | total=127.5469 match=1.4840 pose_raw=378.19 lp=0.3348 | gt_matches=1422 nan_skipped=0
+Epoch 06/14:  61%|███▋  | 864/1417 [40:50<26:15,  2.85s/it, loss=148.7696, match=1.5930, pose=431.75, lp=0.3423, nan=0]  Step 7950 | total=148.7696 match=1.5930 pose_raw=431.75 lp=0.3423 | gt_matches=1576 nan_skipped=0
+Epoch 06/14:  65%|███▊  | 914/1417 [43:12<23:32,  2.81s/it, loss=124.4116, match=1.5617, pose=352.92, lp=0.3498, nan=0]  Step 8000 | total=124.4116 match=1.5617 pose_raw=352.92 lp=0.3498 | gt_matches=1505 nan_skipped=0
+Epoch 06/14:  68%|████  | 964/1417 [45:31<20:26,  2.71s/it, loss=116.4177, match=1.8474, pose=322.64, lp=0.3573, nan=0]  Step 8050 | total=116.4177 match=1.8474 pose_raw=322.64 lp=0.3573 | gt_matches=1417 nan_skipped=0
+Epoch 06/14:  72%|███▌ | 1014/1417 [47:48<18:37,  2.77s/it, loss=130.5835, match=2.0326, pose=354.57, lp=0.3648, nan=0]  Step 8100 | total=130.5835 match=2.0326 pose_raw=354.57 lp=0.3648 | gt_matches=1513 nan_skipped=0
+Epoch 06/14:  75%|███▊ | 1064/1417 [50:04<15:31,  2.64s/it, loss=122.4778, match=2.1993, pose=325.40, lp=0.3723, nan=0]  Step 8150 | total=122.4778 match=2.1993 pose_raw=325.40 lp=0.3723 | gt_matches=1387 nan_skipped=0
+Epoch 06/14:  79%|███▉ | 1114/1417 [52:22<13:57,  2.76s/it, loss=140.4219, match=2.3177, pose=366.09, lp=0.3798, nan=0]  Step 8200 | total=140.4219 match=2.3177 pose_raw=366.09 lp=0.3798 | gt_matches=1460 nan_skipped=0
+Epoch 06/14:  82%|████ | 1164/1417 [54:43<12:11,  2.89s/it, loss=109.0955, match=1.5916, pose=279.28, lp=0.3873, nan=0]  Step 8250 | total=109.0955 match=1.5916 pose_raw=279.28 lp=0.3873 | gt_matches=1585 nan_skipped=0
+Epoch 06/14:  86%|████▎| 1214/1417 [57:06<09:43,  2.88s/it, loss=139.6104, match=1.5820, pose=351.34, lp=0.3948, nan=0]  Step 8300 | total=139.6104 match=1.5820 pose_raw=351.34 lp=0.3948 | gt_matches=1563 nan_skipped=0
+Epoch 06/14:  89%|████▍| 1264/1417 [59:24<07:02,  2.76s/it, loss=214.7723, match=1.7960, pose=531.40, lp=0.4023, nan=0]  Step 8350 | total=214.7723 match=1.7960 pose_raw=531.40 lp=0.4023 | gt_matches=1572 nan_skipped=0
+Epoch 06/14:  93%|██▊| 1314/1417 [1:01:40<04:39,  2.71s/it, loss=111.0133, match=1.7100, pose=268.54, lp=0.4098, nan=0]  Step 8400 | total=111.0133 match=1.7100 pose_raw=268.54 lp=0.4098 | gt_matches=1441 nan_skipped=0
+Epoch 06/14:  96%|██▉| 1364/1417 [1:03:56<02:25,  2.75s/it, loss=184.2172, match=1.7379, pose=439.19, lp=0.4173, nan=0]  Step 8450 | total=184.2172 match=1.7379 pose_raw=439.19 lp=0.4173 | gt_matches=1644 nan_skipped=0
+Epoch 06/14: 100%|██▉| 1414/1417 [1:06:16<00:08,  2.81s/it, loss=159.6138, match=1.8482, pose=373.38, lp=0.4248, nan=0]  Step 8500 | total=159.6138 match=1.8482 pose_raw=373.38 lp=0.4248 | gt_matches=1689 nan_skipped=0
+Epoch 06/14: 100%|███| 1417/1417 [1:06:21<00:00,  2.81s/it, loss=107.0687, match=1.6480, pose=249.73, lp=0.4251, nan=0]
+
+Epoch 06 complete in 3982s | avg_total=126.2145 avg_match=1.8206 avg_pose=391.6093 lp=0.4251 nan_skipped=0
+  Checkpoint saved: checkpoints_v05_tartanair\epoch_06.pth
+Epoch 07/14:   3%|▏    | 47/1417 [02:14<1:02:41,  2.75s/it, loss=216.8934, match=1.9396, pose=499.36, lp=0.4323, nan=0]  Step 8550 | total=216.8934 match=1.9396 pose_raw=499.36 lp=0.4323 | gt_matches=1498 nan_skipped=0
+Epoch 07/14:   7%|▎    | 97/1417 [04:33<1:02:20,  2.83s/it, loss=249.5113, match=2.0906, pose=564.87, lp=0.4398, nan=0]  Step 8600 | total=249.5113 match=2.0906 pose_raw=564.87 lp=0.4398 | gt_matches=1271 nan_skipped=0
+Epoch 07/14:  10%|▌     | 147/1417 [06:51<58:01,  2.74s/it, loss=180.2564, match=1.9851, pose=400.68, lp=0.4473, nan=0]  Step 8650 | total=180.2564 match=1.9851 pose_raw=400.68 lp=0.4473 | gt_matches=1452 nan_skipped=0
+Epoch 07/14:  14%|▊     | 197/1417 [09:13<57:24,  2.82s/it, loss=181.6862, match=1.8261, pose=397.44, lp=0.4548, nan=0]  Step 8700 | total=181.6862 match=1.8261 pose_raw=397.44 lp=0.4548 | gt_matches=1518 nan_skipped=0
+Epoch 07/14:  17%|█     | 247/1417 [11:34<54:48,  2.81s/it, loss=157.8171, match=1.8204, pose=339.37, lp=0.4623, nan=0]  Step 8750 | total=157.8171 match=1.8204 pose_raw=339.37 lp=0.4623 | gt_matches=1507 nan_skipped=0
+Epoch 07/14:  21%|█▎    | 297/1417 [13:53<50:50,  2.72s/it, loss=220.4154, match=1.5570, pose=467.57, lp=0.4698, nan=0]  Step 8800 | total=220.4154 match=1.5570 pose_raw=467.57 lp=0.4698 | gt_matches=1595 nan_skipped=0
+Epoch 07/14:  24%|█▍    | 347/1417 [16:09<48:44,  2.73s/it, loss=153.8103, match=1.8189, pose=320.37, lp=0.4773, nan=0]  Step 8850 | total=153.8103 match=1.8189 pose_raw=320.37 lp=0.4773 | gt_matches=1417 nan_skipped=0
+Epoch 07/14:  28%|█▋    | 397/1417 [18:28<47:16,  2.78s/it, loss=175.9552, match=1.8081, pose=361.14, lp=0.4848, nan=0]  Step 8900 | total=175.9552 match=1.8081 pose_raw=361.14 lp=0.4848 | gt_matches=1690 nan_skipped=0
+Epoch 07/14:  32%|█▉    | 447/1417 [20:44<44:10,  2.73s/it, loss=144.4067, match=1.5702, pose=291.81, lp=0.4923, nan=0]  Step 8950 | total=144.4067 match=1.5702 pose_raw=291.81 lp=0.4923 | gt_matches=1574 nan_skipped=0
+Epoch 07/14:  35%|██    | 497/1417 [23:05<43:00,  2.80s/it, loss=160.0416, match=1.6196, pose=318.69, lp=0.4998, nan=0]  Step 9000 | total=160.0416 match=1.6196 pose_raw=318.69 lp=0.4998 | gt_matches=1654 nan_skipped=0
+Epoch 07/14:  39%|██▎   | 547/1417 [25:26<41:03,  2.83s/it, loss=176.7469, match=1.7475, pose=346.82, lp=0.5073, nan=0]  Step 9050 | total=176.7469 match=1.7475 pose_raw=346.82 lp=0.5073 | gt_matches=1469 nan_skipped=0
+Epoch 07/14:  42%|██▌   | 597/1417 [27:49<39:12,  2.87s/it, loss=242.1647, match=1.6274, pose=469.02, lp=0.5148, nan=0]  Step 9100 | total=242.1647 match=1.6274 pose_raw=469.02 lp=0.5148 | gt_matches=1423 nan_skipped=0
+Epoch 07/14:  46%|██▋   | 647/1417 [30:13<36:53,  2.87s/it, loss=201.7414, match=2.0376, pose=384.51, lp=0.5223, nan=0]  Step 9150 | total=201.7414 match=2.0376 pose_raw=384.51 lp=0.5223 | gt_matches=1527 nan_skipped=0
+Epoch 07/14:  49%|██▉   | 697/1417 [32:37<34:31,  2.88s/it, loss=180.7856, match=1.8036, pose=339.73, lp=0.5298, nan=0]  Step 9200 | total=180.7856 match=1.8036 pose_raw=339.73 lp=0.5298 | gt_matches=1448 nan_skipped=0
+Epoch 07/14:  53%|███▏  | 747/1417 [34:57<30:58,  2.77s/it, loss=248.0733, match=2.4128, pose=459.76, lp=0.5373, nan=0]  Step 9250 | total=248.0733 match=2.4128 pose_raw=459.76 lp=0.5373 | gt_matches=1359 nan_skipped=0
+Epoch 07/14:  56%|███▎  | 797/1417 [37:15<28:30,  2.76s/it, loss=239.3702, match=1.7953, pose=438.00, lp=0.5448, nan=0]  Step 9300 | total=239.3702 match=1.7953 pose_raw=438.00 lp=0.5448 | gt_matches=1460 nan_skipped=0
+Epoch 07/14:  60%|███▌  | 847/1417 [39:33<27:21,  2.88s/it, loss=149.0187, match=2.0226, pose=268.25, lp=0.5523, nan=0]  Step 9350 | total=149.0187 match=2.0226 pose_raw=268.25 lp=0.5523 | gt_matches=1366 nan_skipped=0
+Epoch 07/14:  63%|███▊  | 897/1417 [41:54<23:54,  2.76s/it, loss=221.3156, match=1.7638, pose=394.07, lp=0.5598, nan=0]  Step 9400 | total=221.3156 match=1.7638 pose_raw=394.07 lp=0.5598 | gt_matches=1800 nan_skipped=0
+Epoch 07/14:  67%|████  | 947/1417 [44:16<22:20,  2.85s/it, loss=212.1747, match=2.1070, pose=372.50, lp=0.5673, nan=0]  Step 9450 | total=212.1747 match=2.1070 pose_raw=372.50 lp=0.5673 | gt_matches=1484 nan_skipped=0
+Epoch 07/14:  70%|████▏ | 997/1417 [46:33<19:16,  2.75s/it, loss=164.8398, match=1.6165, pose=285.66, lp=0.5748, nan=0]  Step 9500 | total=164.8398 match=1.6165 pose_raw=285.66 lp=0.5748 | gt_matches=1608 nan_skipped=0
+Epoch 07/14:  74%|███▋ | 1047/1417 [48:54<17:00,  2.76s/it, loss=213.6224, match=1.6480, pose=365.77, lp=0.5823, nan=0]  Step 9550 | total=213.6224 match=1.6480 pose_raw=365.77 lp=0.5823 | gt_matches=1527 nan_skipped=0
+Epoch 07/14:  77%|███▊ | 1097/1417 [51:17<15:03,  2.82s/it, loss=185.6168, match=1.6629, pose=313.63, lp=0.5898, nan=0]  Step 9600 | total=185.6168 match=1.6629 pose_raw=313.63 lp=0.5898 | gt_matches=1496 nan_skipped=0
+Epoch 07/14:  81%|████ | 1147/1417 [53:38<12:44,  2.83s/it, loss=223.9140, match=1.8377, pose=373.73, lp=0.5973, nan=0]  Step 9650 | total=223.9140 match=1.8377 pose_raw=373.73 lp=0.5973 | gt_matches=1512 nan_skipped=0
+Epoch 07/14:  84%|████▏| 1197/1417 [55:59<10:16,  2.80s/it, loss=199.4824, match=1.7041, pose=328.80, lp=0.6048, nan=0]  Step 9700 | total=199.4824 match=1.7041 pose_raw=328.80 lp=0.6048 | gt_matches=1561 nan_skipped=0
+Epoch 07/14:  88%|████▍| 1247/1417 [58:19<07:59,  2.82s/it, loss=181.1117, match=2.0197, pose=294.58, lp=0.6123, nan=0]  Step 9750 | total=181.1117 match=2.0197 pose_raw=294.58 lp=0.6123 | gt_matches=1365 nan_skipped=0
+Epoch 07/14:  92%|██▋| 1297/1417 [1:00:36<05:27,  2.73s/it, loss=204.2018, match=1.7476, pose=328.47, lp=0.6198, nan=0]  Step 9800 | total=204.2018 match=1.7476 pose_raw=328.47 lp=0.6198 | gt_matches=1530 nan_skipped=0
+Epoch 07/14:  95%|██▊| 1347/1417 [1:02:58<03:21,  2.88s/it, loss=166.2475, match=1.6453, pose=264.10, lp=0.6273, nan=0]  Step 9850 | total=166.2475 match=1.6453 pose_raw=264.10 lp=0.6273 | gt_matches=1750 nan_skipped=0
+Epoch 07/14:  99%|██▉| 1397/1417 [1:05:20<00:54,  2.74s/it, loss=224.5072, match=1.6851, pose=352.77, lp=0.6348, nan=0]  Step 9900 | total=224.5072 match=1.6851 pose_raw=352.77 lp=0.6348 | gt_matches=1505 nan_skipped=0
+Epoch 07/14: 100%|███| 1417/1417 [1:06:10<00:00,  2.80s/it, loss=260.0256, match=1.9986, pose=406.74, lp=0.6377, nan=0]
+
+Epoch 07 complete in 3971s | avg_total=208.1113 avg_match=1.8307 avg_pose=390.0812 lp=0.6377 nan_skipped=0
+  Checkpoint saved: checkpoints_v05_tartanair\epoch_07.pth
+Epoch 08/14:   2%|     | 30/1417 [01:22<1:01:26,  2.66s/it, loss=255.6612, match=1.6900, pose=397.18, lp=0.6423, nan=0]  Step 9950 | total=255.6612 match=1.6900 pose_raw=397.18 lp=0.6423 | gt_matches=1607 nan_skipped=0
+Epoch 08/14:   6%|▍      | 80/1417 [03:36<59:51,  2.69s/it, loss=250.9980, match=1.8081, pose=385.38, lp=0.6498, nan=0]  Step 10000 | total=250.9980 match=1.8081 pose_raw=385.38 lp=0.6498 | gt_matches=1684 nan_skipped=0
+Epoch 08/14:   9%|▌     | 130/1417 [05:54<59:25,  2.77s/it, loss=296.4271, match=1.8369, pose=450.11, lp=0.6573, nan=0]  Step 10050 | total=296.4271 match=1.8369 pose_raw=450.11 lp=0.6573 | gt_matches=1431 nan_skipped=0
+Epoch 08/14:  13%|▊     | 180/1417 [08:11<55:51,  2.71s/it, loss=280.1395, match=2.1021, pose=420.41, lp=0.6648, nan=0]  Step 10100 | total=280.1395 match=2.1021 pose_raw=420.41 lp=0.6648 | gt_matches=1503 nan_skipped=0
+Epoch 08/14:  16%|▉     | 230/1417 [10:27<54:13,  2.74s/it, loss=221.3866, match=1.9624, pose=328.41, lp=0.6723, nan=0]  Step 10150 | total=221.3866 match=1.9624 pose_raw=328.41 lp=0.6723 | gt_matches=1506 nan_skipped=0
+Epoch 08/14:  20%|█▏    | 280/1417 [12:43<51:06,  2.70s/it, loss=229.7337, match=1.6098, pose=337.25, lp=0.6798, nan=0]  Step 10200 | total=229.7337 match=1.6098 pose_raw=337.25 lp=0.6798 | gt_matches=1640 nan_skipped=0
+Epoch 08/14:  23%|█▍    | 330/1417 [14:57<48:05,  2.65s/it, loss=206.5959, match=2.0628, pose=299.71, lp=0.6873, nan=0]  Step 10250 | total=206.5959 match=2.0628 pose_raw=299.71 lp=0.6873 | gt_matches=1533 nan_skipped=0
+Epoch 08/14:  27%|█▌    | 380/1417 [17:18<48:23,  2.80s/it, loss=280.9039, match=2.0902, pose=403.45, lp=0.6948, nan=0]  Step 10300 | total=280.9039 match=2.0902 pose_raw=403.45 lp=0.6948 | gt_matches=1226 nan_skipped=0
+Epoch 08/14:  30%|█▊    | 430/1417 [19:38<46:21,  2.82s/it, loss=290.4894, match=2.2176, pose=412.76, lp=0.7023, nan=0]  Step 10350 | total=290.4894 match=2.2176 pose_raw=412.76 lp=0.7023 | gt_matches=1655 nan_skipped=0
+Epoch 08/14:  34%|██    | 480/1417 [21:59<45:00,  2.88s/it, loss=301.7948, match=2.1089, pose=424.40, lp=0.7098, nan=0]  Step 10400 | total=301.7948 match=2.1089 pose_raw=424.40 lp=0.7098 | gt_matches=1585 nan_skipped=0
+Epoch 08/14:  37%|██▏   | 530/1417 [24:22<43:00,  2.91s/it, loss=352.5806, match=1.6911, pose=490.96, lp=0.7173, nan=0]  Step 10450 | total=352.5806 match=1.6911 pose_raw=490.96 lp=0.7173 | gt_matches=1378 nan_skipped=0
+Epoch 08/14:  38%|██▎   | 537/1417 [24:40<43:12,  2.95s/it, loss=283.2405, match=1.7416, pose=393.76, lp=0.7182, nan=0]

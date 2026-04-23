@@ -255,10 +255,76 @@ to real images). Two separate problems require two fixes:
 
 ---
 
-## What We Will Do Next (v0.5)
+## v0.5 Results (2026-04-13): Coordinate Normalization Made Things WORSE
 
-1. Apply [0,1] coordinate normalization in `pose_estimation.py`
-2. Add color jitter + gaussian noise augmentation in `tartanair.py`
-3. Disable RANSAC (paper doesn't use it, v0.4 proved no benefit)
-4. Use full dataset (34,309 pairs vs 8,500)
-5. Retrain from scratch as v0.5 — all v0.4 files preserved
+v0.5 applied [0,1] coordinate normalization (paper Eq. 10) + data augmentation
++ removed RANSAC. **Results were worse than v0.4 across the board.**
+
+### v0.5 Training (7 completed epochs):
+
+| Metric | v0.4 (ep 5-10) | v0.5 (ep 5-7) | Verdict |
+|--------|---------------|---------------|---------|
+| Matching loss | 1.81 → 1.35 | 1.88 → 1.83 | v0.5 worse |
+| Pose loss (raw) | ~230 (flat) | ~390 (flat) | v0.5 much worse |
+| NaN/epoch | ~30 | 0 | v0.5 better |
+
+**Analysis**:
+- [0,1] normalization throws away camera calibration info (focal length, principal
+  point). K_inv normalization gives the 8-point algorithm geometrically meaningful
+  coordinates. The paper's notation may not reflect the actual implementation.
+- Removing RANSAC without trained confidence weights is premature — the ConfMLP
+  can't filter outliers, so the 8-point algorithm sees garbage matches.
+- Data augmentation is the one change worth keeping (for domain gap).
+
+**Decision**: Revert to K_inv normalization and RANSAC for v0.6. Keep augmentation.
+
+---
+
+## Root Cause Confirmed: Chicken-and-Egg in ConfMLP (2026-04-14)
+
+After 3 training versions (v0.3: ~500, v0.4: ~230, v0.5: ~390), the pose loss
+plateau is definitively caused by the ConfMLP chicken-and-egg problem:
+
+1. ConfMLP receives NO training signal during epochs 1-4 (only matching loss runs)
+2. At epoch 5, confidence weights are random → all matches get equal weight
+3. The ~50 outlier matches (out of ~300) corrupt the 8-point algorithm
+4. Garbage poses → garbage pose loss gradients → ConfMLP gets meaningless signal
+5. Weights stay random → cycle never starts
+
+**Evidence**:
+- Matching loss converges well (3.7 → 1.35) — model learns WHICH points match
+- But ~17% of matches are still outliers, which is catastrophic for 8-point
+- RANSAC partially breaks the cycle (pose 500→230) but isn't differentiable,
+  so it can't teach the ConfMLP to replace it
+- The fundamental problem: ConfMLP has NO supervision signal that doesn't go
+  through the broken 8-point algorithm
+
+---
+
+## v0.6 Solution: Inlier Classification Loss (Confidence Pretraining)
+
+**File**: `src/losses/losses.py`, class `InlierLoss`
+
+Add a BCE (Binary Cross-Entropy) loss that trains the ConfMLP directly, using
+depth-based reprojection to label each predicted match as inlier or outlier:
+
+```
+For each predicted match (p1 in image 1 → p2 in image 2):
+  1. Back-project p1 to 3D using depth map
+  2. Transform by GT pose: P' = R_gt @ P + t_gt
+  3. Project to image 2: p2_expected = K @ P' / z
+  4. If ||p2_expected - p2|| < 5px → inlier (label = 1)
+  5. Else → outlier (label = 0)
+  6. BCE(confidence_weight, label)
+```
+
+**Why this works**: Gives ConfMLP a direct training signal from epoch 1, without
+going through the 8-point algorithm. By epoch 5, confidence weights already
+distinguish inliers from outliers → 8-point gets clean weighted matches →
+poses improve → pose loss provides useful fine-tuning signal.
+
+**Proven technique**: SuperGlue and LightGlue both pretrain confidence/matching
+before adding pose supervision.
+
+**Config**: `configs/tartanair_v06.yaml`
+**Checkpoints**: `checkpoints_v06_tartanair/`

@@ -43,7 +43,22 @@
       "Bash(python scripts/verify_ned_frame.py)",
       "Bash(python scripts/verify_ned_frame_v2.py)",
       "Bash(python scripts/verify_ned_frame_v3.py)",
-      "Bash(pip show:*)"
+      "Bash(pip show:*)",
+      "Bash(mkdir -p \"D:/Operation Younas/4 dinoVo/UW-VO-Bench/external/tartanvo/models\")",
+      "Bash(curl -L -o tartanvo_1914.pkl \"https://tartanair.blob.core.windows.net/tartanvo/models/tartanvo_1914.pkl\")",
+      "Bash(curl -L -o tartanvo_1914.pkl \"https://cmu.box.com/shared/static/t1a5u4x6dxohl89104dyrsiz42mvq2sz.pkl\")",
+      "Bash(awk '{print $5}')",
+      "Bash(python:*)",
+      "Bash(tasklist)",
+      "Bash(du -sh \"D:/Operation Younas/0 Yonis Ops/younisOps/Dataset/Raw_Dataset/Dumbbell path/\"/*.bag)",
+      "Bash(gh:*)",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:www.qualisys.com)",
+      "Bash(du -sh \"E:/NTNTU DATASET/\"*)",
+      "Bash(du -sh \"E:/NTNTU DATASET/subset-mclab/\"*)",
+      "Bash(tee outputs_v06_tartanair/eval_euroc_epoch14_log.txt)",
+      "Bash(iconv -f UTF-16 -t UTF-8 \"D:/Operation Younas/4 dinoVo/Operation-710/paper_text.txt\")",
+      "WebFetch(domain:ieeexplore.ieee.org)"
     ]
   }
 }

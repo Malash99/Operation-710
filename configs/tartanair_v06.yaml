@@ -1,0 +1,56 @@
+# DINO-VO v0.6 — Confidence Pretraining via Inlier Classification Loss
+#
+# Root cause: ConfMLP weights are random during epochs 1-4. When pose loss
+# activates at epoch 5, the 8-point algorithm gets garbage-weighted matches
+# → garbage poses → meaningless gradients → ConfMLP never learns.
+#
+# Fix: Add BCE loss that trains ConfMLP to predict geometric inlier status
+# for each predicted match, using depth-based reprojection as ground truth.
+# Active from epoch 1 — gives ConfMLP a direct training signal.
+#
+# Based on v0.4 (best results so far) with additions:
+#   - inlier_loss: true (NEW — confidence pretraining)
+#   - lambda_inlier: 0.5 (NEW — inlier loss weight)
+#   - augmentation: true (kept from v0.5 — helps domain gap)
+#   - coord_normalization: K_inv (reverted from v0.5 — K_inv is better)
+#   - ransac_filter: true (kept — helps 8-point during training)
+#   - checkpoint_dir: checkpoints_v06_tartanair
+#   - output_dir: outputs_v06_tartanair
+
+data:
+  dataset: tartanair
+  data_root: data/tartanair
+  skip_frames: 1
+  target_h: 476
+  target_w: 742
+  max_pairs: 8500             # Same as v0.3/v0.4/v0.5 for fair comparison
+  augmentation: true          # Color jitter + gaussian noise (from v0.5)
+
+training:
+  epochs: 14
+  batch_size: 6
+  num_workers: 2
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  lambda_p_start_epoch: 5
+  lambda_p_increment: 1.5e-4
+  lambda_p_max: 0.9
+  grad_clip: 1.0
+  use_amp: false
+  ransac_filter: true         # Keep RANSAC crutch during training
+  ransac_threshold: 3.0
+  coord_normalization: K_inv  # Reverted from v0.5 (K_inv proven better)
+  inlier_loss: true           # NEW: confidence pretraining
+  lambda_inlier: 0.5          # NEW: inlier loss weight
+
+model:
+  top_k: 512
+  descriptor_dim: 192
+  matching_layers: 12
+  reproj_threshold: 5.0
+
+logging:
+  log_interval: 50
+  checkpoint_interval: 1
+  checkpoint_dir: checkpoints_v06_tartanair
+  output_dir: outputs_v06_tartanair

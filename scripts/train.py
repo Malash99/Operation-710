@@ -37,7 +37,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.datasets.euroc import EuRoCDataset
 from src.datasets.tartanair import build_tartanair_dataset
 from src.models.dino_vo import DinoVO
-from src.losses.losses import DinoVOLoss
+from src.losses.losses import DinoVOLoss, InlierLoss
 
 
 # ------------------------------------------------------------------ #
@@ -328,13 +328,24 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
     if use_ransac:
         print(f"  RANSAC outlier filtering ENABLED (threshold={ransac_thr}px)")
 
+    # --- Inlier pretraining loss (confidence supervision) ---
+    use_inlier = cfg["training"].get("inlier_loss", False)
+    lambda_inlier = cfg["training"].get("lambda_inlier", 0.5)
+    # Separate threshold for inlier BCE labels — tighter than GT match threshold.
+    # 2px gives ~50% inlier split (balanced BCE); 5px gives ~70% (near-entropy, weak gradient).
+    inlier_reproj_thr = cfg["training"].get("inlier_reproj_threshold", reproj_thr)
+    inlier_loss_fn = None
+    if use_inlier:
+        inlier_loss_fn = InlierLoss(reproj_threshold=inlier_reproj_thr).to(device)
+        print(f"  Inlier pretraining loss ENABLED (lambda={lambda_inlier}, reproj_thr={inlier_reproj_thr}px)")
+
     # --- Mixed precision (AMP) for faster training on RTX GPUs ---
     use_amp = cfg["training"].get("use_amp", True) and device.type == "cuda"
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
     if use_amp:
         print("  Mixed precision (AMP) enabled — ~1.5-2x speedup")
 
-    history = {"step": [], "total": [], "matching": [], "pose": [], "lambda_p": []}
+    history = {"step": [], "total": [], "matching": [], "pose": [], "lambda_p": [], "inlier": []}
     global_step = 0
     run_steps = 0   # steps taken in this run (for max_steps stopping)
     start_epoch = 1
@@ -360,7 +371,7 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
         if epoch < lambda_p_start:
             loss_fn.set_lambda_p(0.0)
 
-        epoch_losses = {"total": [], "matching": [], "pose": []}
+        epoch_losses = {"total": [], "matching": [], "pose": [], "inlier": []}
         epoch_start = time.time()
 
         pbar = tqdm(loader, desc=f"Epoch {epoch:02d}/{epochs}", leave=True)
@@ -446,6 +457,22 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
 
             total_loss = loss_dict["total"]
 
+            # --- Inlier pretraining loss (confidence supervision) ---
+            if use_inlier:
+                # Clean NaN weights for stability (same as RANSAC path)
+                weights_clean = [
+                    torch.nan_to_num(w, nan=0.0, posinf=0.0, neginf=0.0)
+                    for w in out["weights"]
+                ]
+                L_inlier = inlier_loss_fn(
+                    out["kp1"], out["kp2"],
+                    out["matches"], weights_clean,
+                    depth1, K, T_gt,
+                )
+                total_loss = total_loss + lambda_inlier * L_inlier
+            else:
+                L_inlier = torch.tensor(0.0, device=device)
+
             # --- NaN guard: skip step if loss exploded ---
             if torch.isnan(total_loss) or torch.isinf(total_loss):
                 nan_count += 1
@@ -493,31 +520,38 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
             total_l = total_loss.item()
             match_l = loss_dict["matching"].item()
             pose_l  = loss_dict["pose"].item()
+            inlier_l = L_inlier.item() if use_inlier else 0.0
             lp      = loss_fn.lambda_p.item()
 
             epoch_losses["total"].append(total_l)
             epoch_losses["matching"].append(match_l)
             epoch_losses["pose"].append(pose_l)
+            epoch_losses["inlier"].append(inlier_l)
 
-            pbar.set_postfix({
+            postfix = {
                 "loss": f"{total_l:.4f}",
                 "match": f"{match_l:.4f}",
                 "pose": f"{pose_l:.2f}",
                 "lp": f"{lp:.4f}",
                 "nan": nan_count,
-            })
+            }
+            if use_inlier:
+                postfix["inlier"] = f"{inlier_l:.4f}"
+            pbar.set_postfix(postfix)
 
             if global_step % log_interval == 0:
                 n_gt = gt_mask.sum().item()
-                ransac_info = ""
+                extra_info = ""
                 if use_ransac and epoch >= lambda_p_start:
                     avg_inliers = np.mean(inlier_cts) if inlier_cts else 0
-                    ransac_info = f" ransac_inliers={avg_inliers:.0f}"
+                    extra_info += f" ransac_inliers={avg_inliers:.0f}"
+                if use_inlier:
+                    extra_info += f" inlier_loss={inlier_l:.4f}"
                 print(
                     f"  Step {global_step} | "
                     f"total={total_l:.4f} match={match_l:.4f} "
                     f"pose_raw={pose_l:.2f} lp={lp:.4f} | "
-                    f"gt_matches={n_gt} nan_skipped={nan_count}{ransac_info}"
+                    f"gt_matches={n_gt} nan_skipped={nan_count}{extra_info}"
                 )
 
             history["step"].append(global_step)
@@ -525,6 +559,7 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
             history["matching"].append(match_l)
             history["pose"].append(pose_l)
             history["lambda_p"].append(lp)
+            history["inlier"].append(inlier_l)
 
             if max_steps and run_steps >= max_steps:
                 print(f"\nReached max_steps={max_steps}, stopping.")
@@ -537,13 +572,23 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
         avg_total = np.mean(epoch_losses["total"])
         avg_match = np.mean(epoch_losses["matching"])
         avg_pose  = np.mean(epoch_losses["pose"])
+        avg_inlier = np.mean(epoch_losses["inlier"]) if epoch_losses["inlier"] else 0.0
 
+        inlier_str = f" avg_inlier={avg_inlier:.4f}" if use_inlier else ""
         print(
             f"\nEpoch {epoch:02d} complete in {elapsed:.0f}s | "
             f"avg_total={avg_total:.4f} avg_match={avg_match:.4f} "
             f"avg_pose={avg_pose:.4f} lp={loss_fn.lambda_p.item():.4f} "
-            f"nan_skipped={nan_count}"
+            f"nan_skipped={nan_count}{inlier_str}"
         )
+
+        # ConfMLP discrimination check — run on a small validation batch
+        # Tells us if confidence weights are learning to separate inliers from outliers.
+        # Target: ratio >= 5.0 before activating pose loss (Stage 2).
+        if use_inlier:
+            _log_confmlp_discrimination(model, dataset, device,
+                                        inlier_reproj_thr=inlier_reproj_thr,
+                                        n_samples=20)
 
         # Save checkpoint
         if epoch % ckpt_interval == 0:
@@ -557,6 +602,65 @@ def train(cfg: dict, resume: str = None, max_steps: int = None):
 # ------------------------------------------------------------------ #
 #  Helpers                                                             #
 # ------------------------------------------------------------------ #
+
+@torch.no_grad()
+def _log_confmlp_discrimination(model, dataset, device, inlier_reproj_thr, n_samples=20):
+    """Sample n_samples pairs and report mean weight on GT-inliers vs GT-outliers.
+
+    This is the key convergence signal for Stage 1: ratio should grow from ~1.4x
+    toward >5x as ConfMLP learns to assign high weight to geometrically correct matches.
+    """
+    model.eval()
+    w_inlier_all, w_outlier_all = [], []
+    idxs = np.random.choice(len(dataset), min(n_samples, len(dataset)), replace=False)
+
+    for idx in idxs:
+        sample = dataset[int(idx)]
+        img1 = sample["image1"].unsqueeze(0).to(device)
+        img2 = sample["image2"].unsqueeze(0).to(device)
+        K = sample["intrinsics"].to(device)
+        depth1 = sample["depth1"].to(device)
+        T_gt = sample["relative_pose"].to(device)
+
+        out = model(img1, img2, K.unsqueeze(0))
+        matches = out["matches"][0]
+        weights = out["weights"][0]
+        if matches.shape[0] == 0:
+            continue
+
+        kp1_m = out["kp1"][0][matches[:, 0]].float()
+        kp2_m = out["kp2"][0][matches[:, 1]].float()
+        w = torch.nan_to_num(weights, nan=0.5)
+
+        # GT inlier labels via depth reprojection
+        px = kp1_m[:, 0].long().clamp(0, depth1.shape[1] - 1)
+        py = kp1_m[:, 1].long().clamp(0, depth1.shape[0] - 1)
+        d = depth1[py, px]
+        fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
+        X1 = torch.stack([(kp1_m[:, 0] - cx) * d / fx,
+                           (kp1_m[:, 1] - cy) * d / fy, d], dim=-1)
+        R_gt = T_gt[:3, :3]; t_gt = T_gt[:3, 3]
+        X2 = X1 @ R_gt.T + t_gt
+        z2 = X2[:, 2].clamp(min=1e-6)
+        u2 = fx * X2[:, 0] / z2 + cx
+        v2 = fy * X2[:, 1] / z2 + cy
+        err = torch.stack([u2, v2], dim=-1).sub(kp2_m).norm(dim=-1)
+        inlier = (d > 0.1) & (X2[:, 2] > 0.1) & (err < inlier_reproj_thr)
+
+        if inlier.sum() > 0:
+            w_inlier_all.append(w[inlier].mean().item())
+        if (~inlier).sum() > 0:
+            w_outlier_all.append(w[~inlier].mean().item())
+
+    model.train()
+    if w_inlier_all and w_outlier_all:
+        wi = np.mean(w_inlier_all)
+        wo = np.mean(w_outlier_all)
+        ratio = wi / max(wo, 1e-6)
+        status = "OK" if ratio >= 5.0 else ("improving" if ratio >= 2.5 else "WEAK")
+        print(f"  ConfMLP discrimination: inlier={wi:.3f}  outlier={wo:.3f}  "
+              f"ratio={ratio:.2f}x  [{status}] (target: >=5.0x for Stage 2)")
+
 
 def _save_checkpoint(model, optimizer, loss_fn, epoch, step, cfg):
     ckpt_dir = cfg["logging"]["checkpoint_dir"]

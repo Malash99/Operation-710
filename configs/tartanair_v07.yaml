@@ -1,0 +1,59 @@
+# DINO-VO v0.7 — Stage 1: ConfMLP Pretraining Only (No Pose Loss)
+#
+# Diagnosis (v0.6 test results):
+#   - GT-weights test: 8-point is correct (0.13 deg rotation with perfect inliers)
+#   - ConfMLP discrimination ratio: 1.44x (should be >5x) after 14 epochs
+#   - InlierLoss BCE barely moved: 0.629 -> 0.571 (random baseline = 0.693)
+#   - Root cause: lambda_inlier=0.5 too weak + reproj_threshold=5.0px too loose
+#     (5px gives ~70% "inliers" -> BCE near entropy -> near-zero gradient for outliers)
+#
+# Stage 1 fix:
+#   - lambda_inlier: 3.0 (was 0.5) — dominate matching loss
+#   - inlier_reproj_threshold: 2.0px (new key) — tighter labels, ~50% split
+#   - lambda_p_max: 0.0 + lambda_p_start_epoch: 999 — pose loss disabled entirely
+#   - Train 10 epochs, monitor ConfMLP discrimination ratio each epoch
+#
+# Stopping criterion: run test_gt_weights_pose.py after training.
+#   If inlier/outlier weight ratio >= 5x -> proceed to Stage 2 (v0.8, add pose loss)
+#   If ratio still ~1.5x -> ConfMLP architecture or label quality needs investigation
+#
+# Stage 2 (v0.8) will load this checkpoint and ramp pose loss normally.
+
+data:
+  dataset: tartanair
+  data_root: data/tartanair
+  skip_frames: 1
+  target_h: 476
+  target_w: 742
+  max_pairs: 8500
+  augmentation: true
+
+training:
+  epochs: 10
+  batch_size: 6
+  num_workers: 2
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  lambda_p_start_epoch: 999       # Pose loss never activates in Stage 1
+  lambda_p_increment: 1.5e-4
+  lambda_p_max: 0.0               # Stage 1: no pose loss at all
+  grad_clip: 1.0
+  use_amp: false
+  ransac_filter: true             # Keep RANSAC for 8-point stability
+  ransac_threshold: 3.0
+  coord_normalization: K_inv
+  inlier_loss: true
+  lambda_inlier: 3.0              # Was 0.5 — now dominates matching loss
+  inlier_reproj_threshold: 2.0    # New key — tighter than GT match threshold (5px)
+
+model:
+  top_k: 512
+  descriptor_dim: 192
+  matching_layers: 12
+  reproj_threshold: 5.0           # GT correspondence generation (unchanged)
+
+logging:
+  log_interval: 50
+  checkpoint_interval: 1
+  checkpoint_dir: checkpoints_v07_tartanair
+  output_dir: outputs_v07_tartanair
